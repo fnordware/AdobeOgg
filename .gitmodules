@@ -1,0 +1,6 @@
+[submodule "ext/libogg"]
+	path = ext/libogg
+	url = git://git.xiph.org/mirrors/ogg.git
+[submodule "ext/libvorbis"]
+	path = ext/libvorbis
+	url = git://git.xiph.org/mirrors/vorbis.git
