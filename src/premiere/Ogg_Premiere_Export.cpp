@@ -304,8 +304,14 @@ exSDKFileExtension(
 }
 
 
+#define OggAudioMethod	"OggAudioMethod"
 #define OggAudioQuality	"OggAudioQuality"
+#define OggAudioBitrate	"OggAudioBitrate"
 
+typedef enum {
+	OGG_QUALITY = 0,
+	OGG_BITRATE
+} Ogg_Method;
 
 #define OV_OK 0
 
@@ -333,10 +339,16 @@ exSDKExport(
 	csSDK_int32 gIdx = 0;
 	
 	
-	exParamValues sampleRateP, channelTypeP, audioQualityP;
+	exParamValues sampleRateP, channelTypeP;
 	paramSuite->GetParamValue(exID, gIdx, ADBEAudioRatePerSecond, &sampleRateP);
 	paramSuite->GetParamValue(exID, gIdx, ADBEAudioNumChannels, &channelTypeP);
+	
+	
+	exParamValues audioMethodP, audioQualityP, audioBitrateP;
+	paramSuite->GetParamValue(exID, gIdx, OggAudioMethod, &audioMethodP);
 	paramSuite->GetParamValue(exID, gIdx, OggAudioQuality, &audioQualityP);
+	paramSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &audioBitrateP);
+	
 	
 	const PrAudioChannelType audioFormat = (PrAudioChannelType)channelTypeP.value.intValue;
 	const int audioChannels = (audioFormat == kPrAudioChannelType_51 ? 6 :
@@ -353,10 +365,23 @@ exSDKExport(
 
 	vorbis_info_init(&vi);
 	
-	v_err = vorbis_encode_init_vbr(&vi,
+	if(audioMethodP.value.intValue == OGG_BITRATE)
+	{
+		v_err = vorbis_encode_init(&vi,
 									audioChannels,
 									sampleRateP.value.floatValue,
-									audioQualityP.value.floatValue);
+									-1,
+									audioBitrateP.value.intValue * 1000,
+									-1);
+	}
+	else
+	{
+		v_err = vorbis_encode_init_vbr(&vi,
+										audioChannels,
+										sampleRateP.value.floatValue,
+										audioQualityP.value.floatValue);
+	}
+	
 	if(v_err == OV_OK)
 	{
 		result = fileSuite->Open(exportInfoP->fileObject);
@@ -617,6 +642,25 @@ exSDKGenerateDefaultParams(
 									ADBEAudioTabGroup, ADBEAudioCodecGroup, groupString,
 									kPrFalse, kPrFalse, kPrFalse);
 									
+	// Method
+	exParamValues audioMethodValues;
+	audioMethodValues.structVersion = 1;
+	audioMethodValues.rangeMin.intValue = OGG_QUALITY;
+	audioMethodValues.rangeMax.intValue = OGG_BITRATE;
+	audioMethodValues.value.intValue = OGG_QUALITY;
+	audioMethodValues.disabled = kPrFalse;
+	audioMethodValues.hidden = kPrFalse;
+	
+	exNewParamInfo audioMethodParam;
+	audioMethodParam.structVersion = 1;
+	strncpy(audioMethodParam.identifier, OggAudioMethod, 255);
+	audioMethodParam.paramType = exParamType_int;
+	audioMethodParam.flags = exParamFlag_none;
+	audioMethodParam.paramValues = audioMethodValues;
+	
+	exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioMethodParam);
+	
+	
 	// Quality
 	exParamValues audioQualityValues;
 	audioQualityValues.structVersion = 1;
@@ -635,6 +679,24 @@ exSDKGenerateDefaultParams(
 	
 	exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioQualityParam);
 	
+	
+	// Bitrate
+	exParamValues audioBitrateValues;
+	audioBitrateValues.structVersion = 1;
+	audioBitrateValues.rangeMin.intValue = 1;
+	audioBitrateValues.rangeMax.intValue = 1000;
+	audioBitrateValues.value.intValue = 128;
+	audioBitrateValues.disabled = kPrFalse;
+	audioBitrateValues.hidden = kPrTrue;
+	
+	exNewParamInfo audioBitrateParam;
+	audioBitrateParam.structVersion = 1;
+	strncpy(audioBitrateParam.identifier, OggAudioBitrate, 255);
+	audioBitrateParam.paramType = exParamType_int;
+	audioBitrateParam.flags = exParamFlag_slider;
+	audioBitrateParam.paramValues = audioBitrateValues;
+	
+	exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioBitrateParam);
 	
 
 	exportParamSuite->SetParamsVersion(exID, 1);
@@ -732,6 +794,28 @@ exSDKPostProcessParams(
 	exportParamSuite->SetParamName(exID, gIdx, ADBEAudioCodecGroup, paramString);
 
 
+	// Method
+	utf16ncpy(paramString, "Method", 255);
+	exportParamSuite->SetParamName(exID, gIdx, OggAudioMethod, paramString);
+	
+	
+	int audioMethods[] = {	OGG_QUALITY,
+							OGG_BITRATE };
+	
+	const char *audioMethodStrings[]	= {	"Quality",
+											"Bitrate" };
+
+	exportParamSuite->ClearConstrainedValues(exID, gIdx, OggAudioMethod);
+	
+	exOneParamValueRec tempAudioEncodingMethod;
+	for(int i=0; i < 2; i++)
+	{
+		tempAudioEncodingMethod.intValue = audioMethods[i];
+		utf16ncpy(paramString, audioMethodStrings[i], 255);
+		exportParamSuite->AddConstrainedValuePair(exID, gIdx, OggAudioMethod, &tempAudioEncodingMethod, paramString);
+	}
+	
+	
 	// Quality
 	utf16ncpy(paramString, "Quality", 255);
 	exportParamSuite->SetParamName(exID, gIdx, OggAudioQuality, paramString);
@@ -743,6 +827,19 @@ exSDKPostProcessParams(
 	qualityValues.rangeMax.floatValue = 1.f;
 	
 	exportParamSuite->ChangeParam(exID, gIdx, OggAudioQuality, &qualityValues);
+
+
+	// Bitrate
+	utf16ncpy(paramString, "Bitrate (kb/s)", 255);
+	exportParamSuite->SetParamName(exID, gIdx, OggAudioBitrate, paramString);
+	
+	exParamValues bitrateValues;
+	exportParamSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &bitrateValues);
+
+	bitrateValues.rangeMin.intValue = 1;
+	bitrateValues.rangeMax.intValue = 1000;
+	
+	exportParamSuite->ChangeParam(exID, gIdx, OggAudioBitrate, &bitrateValues);
 	
 	
 	return result;
@@ -767,11 +864,15 @@ exSDKGetParamSummary(
 	paramSuite->GetParamValue(exID, gIdx, ADBEAudioRatePerSecond, &sampleRateP);
 	paramSuite->GetParamValue(exID, gIdx, ADBEAudioNumChannels, &channelTypeP);
 
-	exParamValues audioQualityP;
+	exParamValues audioMethodP, audioQualityP, audioBitrateP;
+	paramSuite->GetParamValue(exID, gIdx, OggAudioMethod, &audioMethodP);
 	paramSuite->GetParamValue(exID, gIdx, OggAudioQuality, &audioQualityP);
+	paramSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &audioBitrateP);
 	
 
 	std::stringstream stream1;
+	
+	stream1 << "stream1";
 	
 	std::stringstream stream2;
 	
@@ -779,11 +880,24 @@ exSDKGetParamSummary(
 	stream2 << ", " << (channelTypeP.value.intValue == kPrAudioChannelType_51 ? "Dolby 5.1" :
 						channelTypeP.value.intValue == kPrAudioChannelType_Mono ? "Mono" :
 						"Stereo");
+	stream2 << ", ";
+	
+	if(audioMethodP.value.intValue == OGG_BITRATE)
+	{
+		stream2 << audioBitrateP.value.intValue << " kbps";
+	}
+	else
+	{
+		stream2 << "Quality " << audioQualityP.value.floatValue;
+	}
+	
 	
 	summary2 = stream2.str();
 	
 	
 	std::stringstream stream3;
+	
+	stream3 << "stream3";
 	
 
 	utf16ncpy(summaryRecP->Summary1, summary1.c_str(), 255);
@@ -807,7 +921,19 @@ exSDKValidateParamChanged (
 	
 	std::string param = validateParamChangedRecP->changedParamIdentifier;
 	
-	
+	if(param == OggAudioMethod)
+	{
+		exParamValues audioMethodP, audioQualityP, audioBitrateP;
+		paramSuite->GetParamValue(exID, gIdx, OggAudioMethod, &audioMethodP);
+		paramSuite->GetParamValue(exID, gIdx, OggAudioQuality, &audioQualityP);
+		paramSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &audioBitrateP);
+		
+		audioQualityP.hidden = (audioMethodP.value.intValue == OGG_BITRATE);
+		audioBitrateP.hidden = !audioQualityP.hidden;
+		
+		paramSuite->ChangeParam(exID, gIdx, OggAudioQuality, &audioQualityP);
+		paramSuite->ChangeParam(exID, gIdx, OggAudioBitrate, &audioBitrateP);
+	}
 
 	return malNoError;
 }
