@@ -65,7 +65,7 @@ static size_t ogg_read_func(void *ptr, size_t size, size_t nmemb, void *datasour
 #ifdef PRWIN_ENV	
 	DWORD count = size, out;
 	
-	result = ReadFile(fp, (LPVOID)ptr, count, &out, NULL);
+	BOOL result = ReadFile(fp, (LPVOID)ptr, count, &out, NULL);
 
 	return out;
 #else
@@ -97,7 +97,7 @@ static int ogg_seek_func(void *datasource, ogg_int64_t offset, int whence)
 
 	BOOL result = (pos != 0xFFFFFFFF || NO_ERROR == GetLastError());
 #else
-	BOOL result = SetFilePointerEx(ogg->fp, lpos, NULL, method);
+	BOOL result = SetFilePointerEx(fp, lpos, NULL, method);
 #endif
 
 	return (result ? OV_OK : OV_FALSE);
@@ -125,9 +125,6 @@ static long ogg_tell_func(void *datasource)
 	zero.QuadPart = 0;
 
 	BOOL result = SetFilePointerEx(fp, zero, &lpos, FILE_CURRENT);
-
-	if(!result)
-		throw IoExc("Error calling SetFilePointerEx().");
 
 	pos = lpos.QuadPart;
 	
