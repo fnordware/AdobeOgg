@@ -12,6 +12,7 @@
 		2A136BD2177FD88300E15D71 /* Ogg_Premiere_Import.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2A136BCF177FD88300E15D71 /* Ogg_Premiere_Import.cpp */; };
 		2A136F89178011BB00E15D71 /* libogg.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A553326176ADB3E00BE5A72 /* libogg.a */; };
 		2A136F8C178011C200E15D71 /* libvorbis.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A55332E176ADB4800BE5A72 /* libvorbis.a */; };
+		2AAC33A2178149C3008B1A61 /* libflac.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2AAC33A1178149B7008B1A61 /* libflac.a */; };
 		8D01CCCA0486CAD60068D4B7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 089C167DFE841241C02AAC07 /* InfoPlist.strings */; };
 		8D01CCCE0486CAD60068D4B7 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08EA7FFBFE8413EDC02AAC07 /* Carbon.framework */; };
 /* End PBXBuildFile section */
@@ -45,6 +46,20 @@
 			remoteGlobalIDString = D2AAC045055464E500DB518D;
 			remoteInfo = libogg;
 		};
+		2AAC33A0178149B7008B1A61 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2A1377221780872C00E15D71 /* flac.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = D2AAC046055464E500DB518D /* libflac.a */;
+			remoteInfo = libflac;
+		};
+		2AAC33A3178149CA008B1A61 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2A1377221780872C00E15D71 /* flac.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = D2AAC045055464E500DB518D /* libflac */;
+			remoteInfo = libflac;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -74,6 +89,7 @@
 		2A136BCE177FD88300E15D71 /* Ogg_Premiere_Export.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Ogg_Premiere_Export.h; sourceTree = "<group>"; };
 		2A136BCF177FD88300E15D71 /* Ogg_Premiere_Import.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Ogg_Premiere_Import.cpp; sourceTree = "<group>"; };
 		2A136BD0177FD88300E15D71 /* Ogg_Premiere_Import.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Ogg_Premiere_Import.h; sourceTree = "<group>"; };
+		2A1377221780872C00E15D71 /* flac.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = flac.xcodeproj; path = ext/flac.xcodeproj; sourceTree = "<group>"; };
 		2A55321D176AA87700BE5A72 /* libogg.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = libogg.xcodeproj; path = ext/libogg.xcodeproj; sourceTree = "<group>"; };
 		2A553220176AA87700BE5A72 /* libvorbis.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = libvorbis.xcodeproj; path = ext/libvorbis.xcodeproj; sourceTree = "<group>"; };
 		8D01CCD10486CAD60068D4B7 /* Ogg_Premiere_Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Ogg_Premiere_Info.plist; sourceTree = "<group>"; };
@@ -87,6 +103,7 @@
 				8D01CCCE0486CAD60068D4B7 /* Carbon.framework in Frameworks */,
 				2A136F89178011BB00E15D71 /* libogg.a in Frameworks */,
 				2A136F8C178011C200E15D71 /* libvorbis.a in Frameworks */,
+				2AAC33A2178149C3008B1A61 /* libflac.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -100,6 +117,7 @@
 				089C167CFE841241C02AAC07 /* Resources */,
 				2A55321D176AA87700BE5A72 /* libogg.xcodeproj */,
 				2A553220176AA87700BE5A72 /* libvorbis.xcodeproj */,
+				2A1377221780872C00E15D71 /* flac.xcodeproj */,
 				089C1671FE841209C02AAC07 /* External Frameworks and Libraries */,
 				19C28FB4FE9D528D11CA2CBB /* Products */,
 			);
@@ -166,6 +184,14 @@
 			path = ../../src/premiere;
 			sourceTree = SOURCE_ROOT;
 		};
+		2AAC339D178149B7008B1A61 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2AAC33A1178149B7008B1A61 /* libflac.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -184,6 +210,7 @@
 			dependencies = (
 				2A553333176ADB5600BE5A72 /* PBXTargetDependency */,
 				2A553337176ADB5600BE5A72 /* PBXTargetDependency */,
+				2AAC33A4178149CA008B1A61 /* PBXTargetDependency */,
 			);
 			name = "Ogg Premiere";
 			productInstallPath = "$(HOME)/Library/Bundles";
@@ -209,6 +236,10 @@
 			mainGroup = 089C166AFE841209C02AAC07 /* SDK_File_Import */;
 			projectDirPath = "";
 			projectReferences = (
+				{
+					ProductGroup = 2AAC339D178149B7008B1A61 /* Products */;
+					ProjectRef = 2A1377221780872C00E15D71 /* flac.xcodeproj */;
+				},
 				{
 					ProductGroup = 2A553322176ADB3E00BE5A72 /* Products */;
 					ProjectRef = 2A55321D176AA87700BE5A72 /* libogg.xcodeproj */;
@@ -238,6 +269,13 @@
 			fileType = archive.ar;
 			path = libvorbis.a;
 			remoteRef = 2A55332D176ADB4800BE5A72 /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		2AAC33A1178149B7008B1A61 /* libflac.a */ = {
+			isa = PBXReferenceProxy;
+			fileType = archive.ar;
+			path = libflac.a;
+			remoteRef = 2AAC33A0178149B7008B1A61 /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
 /* End PBXReferenceProxy section */
@@ -286,6 +324,11 @@
 			isa = PBXTargetDependency;
 			name = libogg;
 			targetProxy = 2A553336176ADB5600BE5A72 /* PBXContainerItemProxy */;
+		};
+		2AAC33A4178149CA008B1A61 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = libflac;
+			targetProxy = 2AAC33A3178149CA008B1A61 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -347,6 +390,7 @@
 					../../ext/libogg/include,
 					../../ext/libvorbis/include,
 					../../ext/libvorbis/lib,
+					../../ext/flac/include,
 				);
 				PREBINDING = NO;
 				PREMIERE_SDK = "\"../../ext/Premiere Pro CS5 Mac SDK\"";
@@ -369,6 +413,7 @@
 					../../ext/libogg/include,
 					../../ext/libvorbis/include,
 					../../ext/libvorbis/lib,
+					../../ext/flac/include,
 				);
 				PREBINDING = NO;
 				PREMIERE_SDK = "\"../../ext/Premiere Pro CS5 Mac SDK\"";

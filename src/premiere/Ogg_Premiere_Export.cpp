@@ -30,7 +30,7 @@
 
 // ------------------------------------------------------------------------
 //
-// Ogg plug-in for Premiere
+// Ogg Vorbis (and FLAC) plug-in for Premiere
 //
 // by Brendan Bolles <brendan@fnordware.com>
 //
@@ -58,15 +58,23 @@ extern "C" {
 }
 
 
+#include "FLAC++/encoder.h"
+
+
+
 #include <sstream>
 
 
 static const csSDK_int32 Ogg_ID = 'OggV';
 static const csSDK_int32 Ogg_Export_Class = 'OggV';
 
+static const csSDK_int32 FLAC_ID = 'FLAC';
+static const csSDK_int32 FLAC_Export_Class = 'FLAC';
+
 
 typedef struct ExportSettings
 {
+	csSDK_int32					fileType;
 	SPBasicSuite				*spBasic;
 	PrSDKExportParamSuite		*exportParamSuite;
 	PrSDKExportInfoSuite		*exportInfoSuite;
@@ -116,28 +124,59 @@ exSDKStartup(
 			return exportReturn_IterateExporterDone;
 	}
 	
-
-	infoRecP->fileType			= Ogg_ID;
+	static bool described_ogg = false;
 	
-	utf16ncpy(infoRecP->fileTypeName, "Ogg Vorbis", 255);
-	utf16ncpy(infoRecP->fileTypeDefaultExtension, "ogg", 255);
+	if(infoRecP->exportReqIndex == 0)
+	{
+		infoRecP->fileType			= Ogg_ID;
+		
+		utf16ncpy(infoRecP->fileTypeName, "Ogg Vorbis", 255);
+		utf16ncpy(infoRecP->fileTypeDefaultExtension, "ogg", 255);
+		
+		infoRecP->classID = Ogg_Export_Class;
+		
+		infoRecP->exportReqIndex	= 0;
+		infoRecP->wantsNoProgressBar = kPrFalse;
+		infoRecP->hideInUI			= kPrFalse;
+		infoRecP->doesNotSupportAudioOnly = kPrFalse;
+		infoRecP->canExportVideo	= kPrFalse;
+		infoRecP->canExportAudio	= kPrTrue;
+		infoRecP->singleFrameOnly	= kPrFalse;
+		
+		infoRecP->interfaceVersion	= EXPORTMOD_VERSION;
+		
+		infoRecP->isCacheable		= kPrFalse;
+		
+		described_ogg = true;
+		
+		return exportReturn_IterateExporter;
+	}
+	else if(infoRecP->exportReqIndex == 1)
+	{
+		infoRecP->fileType			= FLAC_ID;
+		
+		utf16ncpy(infoRecP->fileTypeName, "FLAC", 255);
+		utf16ncpy(infoRecP->fileTypeDefaultExtension, "flac", 255);
+		
+		infoRecP->classID = FLAC_Export_Class;
+		
+		infoRecP->exportReqIndex	= 0;
+		infoRecP->wantsNoProgressBar = kPrFalse;
+		infoRecP->hideInUI			= kPrFalse;
+		infoRecP->doesNotSupportAudioOnly = kPrFalse;
+		infoRecP->canExportVideo	= kPrFalse;
+		infoRecP->canExportAudio	= kPrTrue;
+		infoRecP->singleFrameOnly	= kPrFalse;
+		
+		infoRecP->interfaceVersion	= EXPORTMOD_VERSION;
+		
+		infoRecP->isCacheable		= kPrFalse;
+		
+		return exportReturn_IterateExporter;	// Supposed to return exportReturn_IterateExporterDone here
+												// but then Premiere doesn't recognize FLAC.  It's a bug.
+	}
 	
-	infoRecP->classID = Ogg_Export_Class;
-	
-	infoRecP->exportReqIndex	= 0;
-	infoRecP->wantsNoProgressBar = kPrFalse;
-	infoRecP->hideInUI			= kPrFalse;
-	infoRecP->doesNotSupportAudioOnly = kPrFalse;
-	infoRecP->canExportVideo	= kPrFalse;
-	infoRecP->canExportAudio	= kPrTrue;
-	infoRecP->singleFrameOnly	= kPrFalse;
-	
-	infoRecP->interfaceVersion	= EXPORTMOD_VERSION;
-	
-	infoRecP->isCacheable		= kPrFalse;
-	
-
-	return malNoError;
+	return exportReturn_IterateExporterDone;
 }
 
 
@@ -164,6 +203,8 @@ exSDKBeginInstance(
 
 		if(mySettings)
 		{
+			mySettings->fileType = instanceRecP->fileType;
+		
 			mySettings->spBasic		= spBasic;
 			mySettings->memorySuite	= memorySuite;
 			
@@ -298,7 +339,10 @@ exSDKFileExtension(
 	exportStdParms					*stdParmsP, 
 	exQueryExportFileExtensionRec	*exportFileExtensionRecP)
 {
-	utf16ncpy(exportFileExtensionRecP->outFileExtension, "ogg", 255);
+	if(exportFileExtensionRecP->fileType == FLAC_ID)
+		utf16ncpy(exportFileExtensionRecP->outFileExtension, "flac", 255);
+	else
+		utf16ncpy(exportFileExtensionRecP->outFileExtension, "ogg", 255);
 		
 	return malNoError;
 }
@@ -312,6 +356,86 @@ typedef enum {
 	OGG_QUALITY = 0,
 	OGG_BITRATE
 } Ogg_Method;
+
+
+#define FLACAudioCompression "FLACAudioCompression"
+
+class OurEncoder : public FLAC::Encoder::Stream
+{
+  public:
+	OurEncoder(PrSDKExportFileSuite *fileSuite, csSDK_uint32 fileObject, PrSDKExportProgressSuite *exportProgressSuite, csSDK_uint32 exportID);
+	virtual ~OurEncoder();
+	
+	prSuiteError getErr() const { return _err; }
+	
+  protected:
+	virtual ::FLAC__StreamEncoderWriteStatus write_callback(const FLAC__byte buffer[], size_t bytes, unsigned samples, unsigned current_frame);
+	//virtual void progress_callback(FLAC__uint64 bytes_written, FLAC__uint64 samples_written, unsigned frames_written, unsigned total_frames_estimate);
+
+  private:
+	const PrSDKExportFileSuite *_fileSuite;
+	const csSDK_uint32 _fileObject;
+	
+	const PrSDKExportProgressSuite *_exportProgressSuite;
+	const csSDK_uint32 _exportID;
+	
+	prSuiteError _err;
+};
+
+
+OurEncoder::OurEncoder(PrSDKExportFileSuite *fileSuite, csSDK_uint32 fileObject, PrSDKExportProgressSuite *exportProgressSuite, csSDK_uint32 exportID) :
+					FLAC::Encoder::Stream(), _fileSuite(fileSuite), _fileObject(fileObject),
+					_exportProgressSuite(exportProgressSuite), _exportID(exportID), _err(malNoError)
+{
+	prSuiteError result = _fileSuite->Open(_fileObject);
+	
+	if(result != malNoError)
+		throw result;
+}
+
+
+OurEncoder::~OurEncoder()
+{
+	_err = _fileSuite->Close(_fileObject);
+}
+
+
+::FLAC__StreamEncoderWriteStatus
+OurEncoder::write_callback(const FLAC__byte buffer[], size_t bytes, unsigned samples, unsigned current_frame)
+{
+	_err = _fileSuite->Write(_fileObject, (void *)buffer, bytes);
+	
+	return (_err == malNoError ? FLAC__STREAM_ENCODER_WRITE_STATUS_OK : FLAC__STREAM_ENCODER_WRITE_STATUS_FATAL_ERROR);
+}
+
+
+// This is never getting called for some reason.  I'll just do progress in the body.
+//void
+//OurEncoder::progress_callback(FLAC__uint64 bytes_written, FLAC__uint64 samples_written, unsigned frames_written, unsigned total_frames_estimate)
+//{
+//	_err = _exportProgressSuite->UpdateProgressPercent(_exportID, (float)frames_written / (float)total_frames_estimate);
+//	
+//	if(_err == suiteError_ExporterSuspended)
+//	{
+//		_err = _exportProgressSuite->WaitForResume(_exportID);
+//	}
+//}
+
+
+static inline int
+AudioClip(double in, unsigned int max_val)
+{
+	// My understanding with audio is that it uses the full signed range.
+	// So an 8-bit sample is allowed to go from -128 to 127.  It's not
+	// balanced in positive and negative, but I guess that's OK?
+	return (in > 0 ?
+				(in < (max_val - 1) ? in : (max_val - 1)) :
+				(in > (-(int)max_val) ? in : (-(int)max_val) )
+			);
+			
+	// BTW, the need to cast max_val into an int before the - operation
+	// was the source of a horrific bug I gave myself.  Sigh.
+}
 
 #define OV_OK 0
 
@@ -335,7 +459,12 @@ exSDKExport(
 	assert(exportInfoP->exportAudio);
 
 
+	PrTime ticksPerSecond = 0;
+	mySettings->timeSuite->GetTicksPerSecond(&ticksPerSecond);
+	
+					
 	csSDK_uint32 exID = exportInfoP->exporterPluginID;
+	csSDK_uint32 fileType = exportInfoP->fileType;
 	csSDK_int32 gIdx = 0;
 	
 	
@@ -344,170 +473,295 @@ exSDKExport(
 	paramSuite->GetParamValue(exID, gIdx, ADBEAudioNumChannels, &channelTypeP);
 	
 	
-	exParamValues audioMethodP, audioQualityP, audioBitrateP;
-	paramSuite->GetParamValue(exID, gIdx, OggAudioMethod, &audioMethodP);
-	paramSuite->GetParamValue(exID, gIdx, OggAudioQuality, &audioQualityP);
-	paramSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &audioBitrateP);
-	
 	
 	const PrAudioChannelType audioFormat = (PrAudioChannelType)channelTypeP.value.intValue;
 	const int audioChannels = (audioFormat == kPrAudioChannelType_51 ? 6 :
 								audioFormat == kPrAudioChannelType_Mono ? 1 :
 								2);
 
-	int v_err = OV_OK;
-
-	vorbis_info vi;
-	vorbis_comment vc;
-	vorbis_dsp_state vd;
-	vorbis_block vb;
-	ogg_stream_state os;
-
-	vorbis_info_init(&vi);
+	if(fileType == Ogg_ID)
+	{
+		exParamValues audioMethodP, audioQualityP, audioBitrateP;
+		paramSuite->GetParamValue(exID, gIdx, OggAudioMethod, &audioMethodP);
+		paramSuite->GetParamValue(exID, gIdx, OggAudioQuality, &audioQualityP);
+		paramSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &audioBitrateP);
+		
 	
-	if(audioMethodP.value.intValue == OGG_BITRATE)
-	{
-		v_err = vorbis_encode_init(&vi,
-									audioChannels,
-									sampleRateP.value.floatValue,
-									-1,
-									audioBitrateP.value.intValue * 1000,
-									-1);
-	}
-	else
-	{
-		v_err = vorbis_encode_init_vbr(&vi,
+		int v_err = OV_OK;
+
+		vorbis_info vi;
+		vorbis_comment vc;
+		vorbis_dsp_state vd;
+		vorbis_block vb;
+		ogg_stream_state os;
+
+		vorbis_info_init(&vi);
+		
+		if(audioMethodP.value.intValue == OGG_BITRATE)
+		{
+			v_err = vorbis_encode_init(&vi,
 										audioChannels,
 										sampleRateP.value.floatValue,
-										audioQualityP.value.floatValue);
-	}
-	
-	if(v_err == OV_OK)
-	{
-		result = fileSuite->Open(exportInfoP->fileObject);
-		
-		if(result == malNoError)
+										-1,
+										audioBitrateP.value.intValue * 1000,
+										-1);
+		}
+		else
 		{
-			csSDK_uint32 audioRenderID = 0;
-			result = audioSuite->MakeAudioRenderer(exID,
-													exportInfoP->startTime,
-													audioFormat,
-													kPrAudioSampleType_32BitFloat,
-													sampleRateP.value.floatValue, 
-													&audioRenderID);
+			v_err = vorbis_encode_init_vbr(&vi,
+											audioChannels,
+											sampleRateP.value.floatValue,
+											audioQualityP.value.floatValue);
+		}
+		
+		if(v_err == OV_OK)
+		{
+			result = fileSuite->Open(exportInfoP->fileObject);
+			
 			if(result == malNoError)
 			{
-				vorbis_comment_init(&vc);
-				vorbis_analysis_init(&vd, &vi);
-				vorbis_block_init(&vd, &vb);
-				
-				ogg_stream_init(&os,rand());
-				
-				ogg_packet header;
-				ogg_packet header_comm;
-				ogg_packet header_code;
-				
-				vorbis_analysis_headerout(&vd, &vc, &header, &header_comm, &header_code);
-				
-				ogg_stream_packetin(&os, &header);
-				ogg_stream_packetin(&os, &header_comm);
-				ogg_stream_packetin(&os, &header_code);
-		
-		
-				ogg_page og;
-				
-				while( ogg_stream_flush(&os, &og) )
+				csSDK_uint32 audioRenderID = 0;
+				result = audioSuite->MakeAudioRenderer(exID,
+														exportInfoP->startTime,
+														audioFormat,
+														kPrAudioSampleType_32BitFloat,
+														sampleRateP.value.floatValue, 
+														&audioRenderID);
+				if(result == malNoError)
 				{
-					fileSuite->Write(exportInfoP->fileObject, og.header, og.header_len);
-					fileSuite->Write(exportInfoP->fileObject, og.body, og.body_len);
-				}
-				
-				
-				PrTime ticksPerSecond = 0;
-				mySettings->timeSuite->GetTicksPerSecond(&ticksPerSecond);
-				
-				
-				// How am I supposed to know the frame rate for maxBlip?  This is audio-only.
-				// How about this....
-				csSDK_int32 maxBlip = sampleRateP.value.floatValue / 100;
-				//mySettings->sequenceAudioSuite->GetMaxBlip(audioRenderID, frameRateP.value.timeValue, &maxBlip);
-				
-				PrTime pr_duration = exportInfoP->endTime - exportInfoP->startTime;
-				long long total_samples = (PrTime)sampleRateP.value.floatValue * pr_duration / ticksPerSecond;
-				long long samples_to_get = total_samples;
-				
-				while(samples_to_get >= 0 && result == malNoError)
-				{
-					int samples = samples_to_get;
+					vorbis_comment_init(&vc);
+					vorbis_analysis_init(&vd, &vi);
+					vorbis_block_init(&vd, &vb);
 					
-					if(samples > maxBlip)
-						samples = maxBlip;
+					ogg_stream_init(&os,rand());
 					
-					if(samples > 0)
+					ogg_packet header;
+					ogg_packet header_comm;
+					ogg_packet header_code;
+					
+					vorbis_analysis_headerout(&vd, &vc, &header, &header_comm, &header_code);
+					
+					ogg_stream_packetin(&os, &header);
+					ogg_stream_packetin(&os, &header_comm);
+					ogg_stream_packetin(&os, &header_code);
+			
+			
+					ogg_page og;
+					
+					while( ogg_stream_flush(&os, &og) )
 					{
-						float **buffer = vorbis_analysis_buffer(&vd, samples);
-						
-						result = audioSuite->GetAudio(audioRenderID, samples, buffer, false);
+						fileSuite->Write(exportInfoP->fileObject, og.header, og.header_len);
+						fileSuite->Write(exportInfoP->fileObject, og.body, og.body_len);
 					}
-						
-					if(result == malNoError)
+					
+					
+					
+					// How am I supposed to know the frame rate for maxBlip?  This is audio-only.
+					// How about this....
+					csSDK_int32 maxBlip = sampleRateP.value.floatValue / 100;
+					//mySettings->sequenceAudioSuite->GetMaxBlip(audioRenderID, frameRateP.value.timeValue, &maxBlip);
+					
+					PrTime pr_duration = exportInfoP->endTime - exportInfoP->startTime;
+					long long total_samples = (PrTime)sampleRateP.value.floatValue * pr_duration / ticksPerSecond;
+					long long samples_to_get = total_samples;
+					
+					while(samples_to_get >= 0 && result == malNoError)
 					{
-						vorbis_analysis_wrote(&vd, samples);
-				
-						while( vorbis_analysis_blockout(&vd, &vb) )
+						int samples = samples_to_get;
+						
+						if(samples > maxBlip)
+							samples = maxBlip;
+						
+						if(samples > 0)
 						{
-							vorbis_analysis(&vb, NULL);
-							vorbis_bitrate_addblock(&vb);
-
-							ogg_packet op;
+							float **buffer = vorbis_analysis_buffer(&vd, samples);
 							
-							while( vorbis_bitrate_flushpacket(&vd, &op) )
+							result = audioSuite->GetAudio(audioRenderID, samples, buffer, false);
+						}
+							
+						if(result == malNoError)
+						{
+							vorbis_analysis_wrote(&vd, samples);
+					
+							while( vorbis_analysis_blockout(&vd, &vb) )
 							{
-								ogg_stream_packetin(&os, &op);
+								vorbis_analysis(&vb, NULL);
+								vorbis_bitrate_addblock(&vb);
+
+								ogg_packet op;
 								
-								while( ogg_stream_pageout(&os, &og) )
+								while( vorbis_bitrate_flushpacket(&vd, &op) )
 								{
-									fileSuite->Write(exportInfoP->fileObject, og.header, og.header_len);
-									fileSuite->Write(exportInfoP->fileObject, og.body, og.body_len);
+									ogg_stream_packetin(&os, &op);
+									
+									while( ogg_stream_pageout(&os, &og) )
+									{
+										fileSuite->Write(exportInfoP->fileObject, og.header, og.header_len);
+										fileSuite->Write(exportInfoP->fileObject, og.body, og.body_len);
+									}
 								}
+							}
+						}
+						
+						// this way there's one last call to vorbis_analysis_wrote(&vd, 0);
+						if(samples > 0)
+							samples_to_get -= samples;
+						else
+							samples_to_get = -1;
+						
+						
+						if(result == malNoError)
+						{
+							float progress = (double)(total_samples - samples_to_get) / (double)total_samples;
+							
+							result = mySettings->exportProgressSuite->UpdateProgressPercent(exID, progress);
+							
+							if(result == suiteError_ExporterSuspended)
+							{
+								result = mySettings->exportProgressSuite->WaitForResume(exID);
 							}
 						}
 					}
 					
-					// this way there's one last call to vorbis_analysis_wrote(&vd, 0);
-					if(samples > 0)
-						samples_to_get -= samples;
-					else
-						samples_to_get = -1;
-					
-					
-					if(result == malNoError)
-					{
-						float progress = (double)(total_samples - samples_to_get) / (double)total_samples;
-						
-						result = mySettings->exportProgressSuite->UpdateProgressPercent(exID, progress);
-						
-						if(result == suiteError_ExporterSuspended)
-						{
-							result = mySettings->exportProgressSuite->WaitForResume(exID);
-						}
-					}
+					ogg_stream_clear(&os);
+					vorbis_block_clear(&vb);
+					vorbis_dsp_clear(&vd);
+					vorbis_comment_clear(&vc);
+					vorbis_info_clear(&vi);
 				}
 				
-				ogg_stream_clear(&os);
-				vorbis_block_clear(&vb);
-				vorbis_dsp_clear(&vd);
-				vorbis_comment_clear(&vc);
-				vorbis_info_clear(&vi);
+				fileSuite->Close(exportInfoP->fileObject);
+				
+				audioSuite->ReleaseAudioRenderer(exID, audioRenderID);
 			}
-			
-			fileSuite->Close(exportInfoP->fileObject);
-			
-			audioSuite->ReleaseAudioRenderer(exID, audioRenderID);
 		}
+		else
+			result = exportReturn_InternalError;
 	}
-	else
-		result = exportReturn_InternalError;
+	else if(fileType == FLAC_ID)
+	{
+		exParamValues sampleSizeP, FLACcompressionP;
+		paramSuite->GetParamValue(exID, gIdx, ADBEAudioSampleType, &sampleSizeP);
+		paramSuite->GetParamValue(exID, gIdx, FLACAudioCompression, &FLACcompressionP);
+		
+		
+		csSDK_int32 maxBlip = sampleRateP.value.floatValue / 100;
+		
+		PrTime pr_duration = exportInfoP->endTime - exportInfoP->startTime;
+		long long total_samples = (PrTime)sampleRateP.value.floatValue * pr_duration / ticksPerSecond;
+		
+		csSDK_uint32 audioRenderID = 0;
+		result = audioSuite->MakeAudioRenderer(exID,
+												exportInfoP->startTime,
+												audioFormat,
+												kPrAudioSampleType_32BitFloat,
+												sampleRateP.value.floatValue, 
+												&audioRenderID);
+		if(result == malNoError)
+		{
+			try
+			{
+				OurEncoder encoder(fileSuite, exportInfoP->fileObject, mySettings->exportProgressSuite, exID);
+				
+				encoder.set_verify(true);
+				encoder.set_compression_level(FLACcompressionP.value.intValue);
+				encoder.set_channels(audioChannels);
+				encoder.set_bits_per_sample(sampleSizeP.value.intValue);
+				encoder.set_sample_rate(sampleRateP.value.floatValue);
+				encoder.set_total_samples_estimate(total_samples);
+				
+				
+				FLAC__StreamMetadata_VorbisComment_Entry entry;
+				FLAC__StreamMetadata *tag_it = FLAC__metadata_object_new(FLAC__METADATA_TYPE_VORBIS_COMMENT);
+				FLAC__metadata_object_vorbiscomment_entry_from_name_value_pair(&entry, "Writer", "fnord Ogg/FLAC for Premiere");
+				encoder.set_metadata(&tag_it, 1);
+				
+				
+				FLAC__StreamEncoderInitStatus status = encoder.init();
+				
+				if(status == FLAC__STREAM_ENCODER_INIT_STATUS_OK)
+				{
+					float *float_buffers[8] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+					FLAC__int32 *int_buffers[8] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+					
+					for(int c=0; c < audioChannels; c++)
+					{
+						float_buffers[c] = (float *)memorySuite->NewPtr(maxBlip * sizeof(float));
+						int_buffers[c] = (FLAC__int32 *)memorySuite->NewPtr(maxBlip * sizeof(FLAC__int32));
+					}
+					
+					
+					long long samples = total_samples;
+					
+					while(samples > 0 && result == malNoError)
+					{
+						int samples_to_get = maxBlip;
+						
+						if(samples_to_get > samples)
+							samples_to_get = samples;
+					
+						result = audioSuite->GetAudio(audioRenderID, samples_to_get, float_buffers, true);
+						
+						double multiplier = (1L << (sampleSizeP.value.intValue - 1));
+						
+						if(result == malNoError)
+						{
+							for(int c=0; c < audioChannels; c++)
+							{
+								for(int i=0; i < samples_to_get; i++)
+								{
+									int_buffers[c][i] = AudioClip((double)float_buffers[c][i] * multiplier, multiplier);
+								}
+							}
+							
+							bool ok = encoder.process(int_buffers, samples_to_get);
+							
+							samples -= samples_to_get;
+							
+							if(!ok)
+								result = exportReturn_InternalError;
+						}
+						
+						
+						if(result == malNoError)
+						{
+							float progress = (double)(total_samples - samples) / (double)total_samples;
+							
+							result = mySettings->exportProgressSuite->UpdateProgressPercent(exID, progress);
+							
+							if(result == suiteError_ExporterSuspended)
+							{
+								result = mySettings->exportProgressSuite->WaitForResume(exID);
+							}
+						}
+					}
+					
+					
+					bool ok = encoder.finish();
+					
+					assert(ok);
+					
+					
+					for(int c=0; c < audioChannels; c++)
+					{
+						memorySuite->PrDisposePtr((PrMemoryPtr)float_buffers[c]);
+						memorySuite->PrDisposePtr((PrMemoryPtr)int_buffers[c]);
+					}
+				}
+				else
+					result = exportReturn_IncompatibleAudioChannelType;
+				
+				
+				FLAC__metadata_object_delete(tag_it);
+			}
+			catch(...)
+			{
+				result = exportReturn_InternalError;
+			}
+		}
+		
+		audioSuite->ReleaseAudioRenderer(exID, audioRenderID);
+	}
 
 	return result;
 }
@@ -523,11 +777,11 @@ exSDKQueryOutputSettings(
 	ExportSettings *privateData	= reinterpret_cast<ExportSettings*>(outputSettingsP->privateData);
 	
 	csSDK_uint32				exID			= outputSettingsP->exporterPluginID;
+	csSDK_uint32				fileType		= outputSettingsP->fileType;
 	exParamValues				sampleRate,
-								channelType,
-								audioQualityP;
+								channelType;
 	PrSDKExportParamSuite		*paramSuite		= privateData->exportParamSuite;
-	csSDK_int32					mgroupIndex		= 0;
+	csSDK_int32					gIdx			= 0;
 	float						fps				= 0.0f;
 	PrTime						ticksPerSecond	= 0;
 	csSDK_uint32				videoBitrate	= 0;
@@ -537,9 +791,9 @@ exSDKQueryOutputSettings(
 	
 	if(outputSettingsP->inExportAudio)
 	{
-		paramSuite->GetParamValue(exID, mgroupIndex, ADBEAudioRatePerSecond, &sampleRate);
+		paramSuite->GetParamValue(exID, gIdx, ADBEAudioRatePerSecond, &sampleRate);
 		outputSettingsP->outAudioSampleRate = sampleRate.value.floatValue;
-		paramSuite->GetParamValue(exID, mgroupIndex, ADBEAudioNumChannels, &channelType);
+		paramSuite->GetParamValue(exID, gIdx, ADBEAudioNumChannels, &channelType);
 		outputSettingsP->outAudioChannelType = (PrAudioChannelType)channelType.value.intValue;
 		outputSettingsP->outAudioSampleType = kPrAudioSampleType_Compressed;
 		
@@ -548,10 +802,33 @@ exSDKQueryOutputSettings(
 									audioFormat == kPrAudioChannelType_Mono ? 1 :
 									2);
 
-		float qualityMult = (audioQualityP.value.floatValue + 0.1) / 1.1;
-		float ogg_mult = (qualityMult * 0.4) + 0.1;
+		if(fileType == Ogg_ID)
+		{
+			exParamValues audioMethodP, audioQualityP, audioBitrateP;
+			paramSuite->GetParamValue(exID, gIdx, OggAudioMethod, &audioMethodP);
+			paramSuite->GetParamValue(exID, gIdx, OggAudioQuality, &audioQualityP);
+			paramSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &audioBitrateP);
 		
-		videoBitrate += (sampleRate.value.floatValue * audioChannels * 8 * 4 * ogg_mult) / 1024; // IDK
+			if(audioMethodP.value.intValue == OGG_QUALITY)
+			{
+				float qualityMult = (audioQualityP.value.floatValue + 0.1) / 1.1;
+				float ogg_mult = (qualityMult * 0.4) + 0.1;
+			
+				videoBitrate += (sampleRate.value.floatValue * audioChannels * 8 * 4 * ogg_mult) / 1024; // IDK
+			}
+			else
+				videoBitrate += audioBitrateP.value.intValue;
+		}
+		else if(fileType == FLAC_ID)
+		{
+			exParamValues sampleSizeP, FLACcompressionP;
+			paramSuite->GetParamValue(exID, gIdx, ADBEAudioSampleType, &sampleSizeP);
+			paramSuite->GetParamValue(exID, gIdx, FLACAudioCompression, &FLACcompressionP);
+			
+			float flac_mult = 4.f / (FLACcompressionP.value.intValue + 1.f);
+		
+			videoBitrate += (flac_mult * sampleRate.value.floatValue * audioChannels * sampleSizeP.value.intValue) / 1024; // IDK
+		}
 	}
 	
 	// return outBitratePerSecond in kbps
@@ -575,6 +852,7 @@ exSDKGenerateDefaultParams(
 	PrSDKTimeSuite			*timeSuite			= lRec->timeSuite;
 
 	csSDK_int32 exID = generateDefaultParamRec->exporterPluginID;
+	csSDK_uint32 fileType = generateDefaultParamRec->fileType;
 	csSDK_int32 gIdx = 0;
 	
 	prUTF16Char groupString[256];
@@ -635,68 +913,115 @@ exSDKGenerateDefaultParams(
 	exportParamSuite->AddParam(exID, gIdx, ADBEBasicAudioGroup, &channelTypeParam);
 	
 	
-	
-	// Audio Codec Settings Group
-	utf16ncpy(groupString, "Codec settings", 255);
-	exportParamSuite->AddParamGroup(exID, gIdx,
-									ADBEAudioTabGroup, ADBEAudioCodecGroup, groupString,
-									kPrFalse, kPrFalse, kPrFalse);
-									
-	// Method
-	exParamValues audioMethodValues;
-	audioMethodValues.structVersion = 1;
-	audioMethodValues.rangeMin.intValue = OGG_QUALITY;
-	audioMethodValues.rangeMax.intValue = OGG_BITRATE;
-	audioMethodValues.value.intValue = OGG_QUALITY;
-	audioMethodValues.disabled = kPrFalse;
-	audioMethodValues.hidden = kPrFalse;
-	
-	exNewParamInfo audioMethodParam;
-	audioMethodParam.structVersion = 1;
-	strncpy(audioMethodParam.identifier, OggAudioMethod, 255);
-	audioMethodParam.paramType = exParamType_int;
-	audioMethodParam.flags = exParamFlag_none;
-	audioMethodParam.paramValues = audioMethodValues;
-	
-	exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioMethodParam);
-	
-	
-	// Quality
-	exParamValues audioQualityValues;
-	audioQualityValues.structVersion = 1;
-	audioQualityValues.rangeMin.floatValue = -0.1f;
-	audioQualityValues.rangeMax.floatValue = 1.f;
-	audioQualityValues.value.floatValue = 0.5f;
-	audioQualityValues.disabled = kPrFalse;
-	audioQualityValues.hidden = kPrFalse;
-	
-	exNewParamInfo audioQualityParam;
-	audioQualityParam.structVersion = 1;
-	strncpy(audioQualityParam.identifier, OggAudioQuality, 255);
-	audioQualityParam.paramType = exParamType_float;
-	audioQualityParam.flags = exParamFlag_slider;
-	audioQualityParam.paramValues = audioQualityValues;
-	
-	exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioQualityParam);
-	
-	
-	// Bitrate
-	exParamValues audioBitrateValues;
-	audioBitrateValues.structVersion = 1;
-	audioBitrateValues.rangeMin.intValue = 1;
-	audioBitrateValues.rangeMax.intValue = 1000;
-	audioBitrateValues.value.intValue = 128;
-	audioBitrateValues.disabled = kPrFalse;
-	audioBitrateValues.hidden = kPrTrue;
-	
-	exNewParamInfo audioBitrateParam;
-	audioBitrateParam.structVersion = 1;
-	strncpy(audioBitrateParam.identifier, OggAudioBitrate, 255);
-	audioBitrateParam.paramType = exParamType_int;
-	audioBitrateParam.flags = exParamFlag_slider;
-	audioBitrateParam.paramValues = audioBitrateValues;
-	
-	exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioBitrateParam);
+	if(fileType == Ogg_ID)
+	{
+		// Audio Codec Settings Group
+		utf16ncpy(groupString, "Codec settings", 255);
+		exportParamSuite->AddParamGroup(exID, gIdx,
+										ADBEAudioTabGroup, ADBEAudioCodecGroup, groupString,
+										kPrFalse, kPrFalse, kPrFalse);
+										
+		// Method
+		exParamValues audioMethodValues;
+		audioMethodValues.structVersion = 1;
+		audioMethodValues.rangeMin.intValue = OGG_QUALITY;
+		audioMethodValues.rangeMax.intValue = OGG_BITRATE;
+		audioMethodValues.value.intValue = OGG_QUALITY;
+		audioMethodValues.disabled = kPrFalse;
+		audioMethodValues.hidden = kPrFalse;
+		
+		exNewParamInfo audioMethodParam;
+		audioMethodParam.structVersion = 1;
+		strncpy(audioMethodParam.identifier, OggAudioMethod, 255);
+		audioMethodParam.paramType = exParamType_int;
+		audioMethodParam.flags = exParamFlag_none;
+		audioMethodParam.paramValues = audioMethodValues;
+		
+		exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioMethodParam);
+		
+		
+		// Quality
+		exParamValues audioQualityValues;
+		audioQualityValues.structVersion = 1;
+		audioQualityValues.rangeMin.floatValue = -0.1f;
+		audioQualityValues.rangeMax.floatValue = 1.f;
+		audioQualityValues.value.floatValue = 0.5f;
+		audioQualityValues.disabled = kPrFalse;
+		audioQualityValues.hidden = kPrFalse;
+		
+		exNewParamInfo audioQualityParam;
+		audioQualityParam.structVersion = 1;
+		strncpy(audioQualityParam.identifier, OggAudioQuality, 255);
+		audioQualityParam.paramType = exParamType_float;
+		audioQualityParam.flags = exParamFlag_slider;
+		audioQualityParam.paramValues = audioQualityValues;
+		
+		exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioQualityParam);
+		
+		
+		// Bitrate
+		exParamValues audioBitrateValues;
+		audioBitrateValues.structVersion = 1;
+		audioBitrateValues.rangeMin.intValue = 1;
+		audioBitrateValues.rangeMax.intValue = 1000;
+		audioBitrateValues.value.intValue = 128;
+		audioBitrateValues.disabled = kPrFalse;
+		audioBitrateValues.hidden = kPrTrue;
+		
+		exNewParamInfo audioBitrateParam;
+		audioBitrateParam.structVersion = 1;
+		strncpy(audioBitrateParam.identifier, OggAudioBitrate, 255);
+		audioBitrateParam.paramType = exParamType_int;
+		audioBitrateParam.flags = exParamFlag_slider;
+		audioBitrateParam.paramValues = audioBitrateValues;
+		
+		exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioBitrateParam);
+	}
+	else if(fileType == FLAC_ID)
+	{
+		// Sample size (bit depth)
+		exParamValues audioSampleSizeValues;
+		audioSampleSizeValues.structVersion = 1;
+		audioSampleSizeValues.rangeMin.intValue = 8;
+		audioSampleSizeValues.rangeMax.intValue = 32;
+		audioSampleSizeValues.value.intValue = 16;
+		audioSampleSizeValues.disabled = kPrFalse;
+		audioSampleSizeValues.hidden = kPrFalse;
+		
+		exNewParamInfo audioSampleSizeParam;
+		audioSampleSizeParam.structVersion = 1;
+		strncpy(audioSampleSizeParam.identifier, ADBEAudioSampleType, 255);
+		audioSampleSizeParam.paramType = exParamType_int;
+		audioSampleSizeParam.flags = exParamFlag_none;
+		audioSampleSizeParam.paramValues = audioSampleSizeValues;
+		
+		exportParamSuite->AddParam(exID, gIdx, ADBEBasicAudioGroup, &audioSampleSizeParam);
+		
+		
+		// Audio Codec Settings Group
+		utf16ncpy(groupString, "Codec settings", 255);
+		exportParamSuite->AddParamGroup(exID, gIdx,
+										ADBEAudioTabGroup, ADBEAudioCodecGroup, groupString,
+										kPrFalse, kPrFalse, kPrFalse);
+
+		// Compression
+		exParamValues audioCompressionValues;
+		audioCompressionValues.structVersion = 1;
+		audioCompressionValues.rangeMin.intValue = 0;
+		audioCompressionValues.rangeMax.intValue = 8;
+		audioCompressionValues.value.intValue = 5;
+		audioCompressionValues.disabled = kPrFalse;
+		audioCompressionValues.hidden = kPrFalse;
+		
+		exNewParamInfo audioCompressionParam;
+		audioCompressionParam.structVersion = 1;
+		strncpy(audioCompressionParam.identifier, FLACAudioCompression, 255);
+		audioCompressionParam.paramType = exParamType_int;
+		audioCompressionParam.flags = exParamFlag_slider;
+		audioCompressionParam.paramValues = audioCompressionValues;
+		
+		exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioCompressionParam);
+	}
 	
 
 	exportParamSuite->SetParamsVersion(exID, 1);
@@ -719,6 +1044,7 @@ exSDKPostProcessParams(
 	PrSDKTimeSuite			*timeSuite			= lRec->timeSuite;
 
 	csSDK_int32 exID = postProcessParamsRecP->exporterPluginID;
+	csSDK_int32 fileType = postProcessParamsRecP->fileType;
 	csSDK_int32 gIdx = 0;
 	
 	prUTF16Char paramString[256];
@@ -789,57 +1115,100 @@ exSDKPostProcessParams(
 	}
 	
 	
-	// Audio codec settings
-	utf16ncpy(paramString, "Vorbis settings", 255);
-	exportParamSuite->SetParamName(exID, gIdx, ADBEAudioCodecGroup, paramString);
-
-
-	// Method
-	utf16ncpy(paramString, "Method", 255);
-	exportParamSuite->SetParamName(exID, gIdx, OggAudioMethod, paramString);
-	
-	
-	int audioMethods[] = {	OGG_QUALITY,
-							OGG_BITRATE };
-	
-	const char *audioMethodStrings[]	= {	"Quality",
-											"Bitrate" };
-
-	exportParamSuite->ClearConstrainedValues(exID, gIdx, OggAudioMethod);
-	
-	exOneParamValueRec tempAudioEncodingMethod;
-	for(int i=0; i < 2; i++)
+	if(fileType == Ogg_ID)
 	{
-		tempAudioEncodingMethod.intValue = audioMethods[i];
-		utf16ncpy(paramString, audioMethodStrings[i], 255);
-		exportParamSuite->AddConstrainedValuePair(exID, gIdx, OggAudioMethod, &tempAudioEncodingMethod, paramString);
+		// Audio codec settings
+		utf16ncpy(paramString, "Vorbis settings", 255);
+		exportParamSuite->SetParamName(exID, gIdx, ADBEAudioCodecGroup, paramString);
+
+
+		// Method
+		utf16ncpy(paramString, "Method", 255);
+		exportParamSuite->SetParamName(exID, gIdx, OggAudioMethod, paramString);
+		
+		
+		int audioMethods[] = {	OGG_QUALITY,
+								OGG_BITRATE };
+		
+		const char *audioMethodStrings[]	= {	"Quality",
+												"Bitrate" };
+
+		exportParamSuite->ClearConstrainedValues(exID, gIdx, OggAudioMethod);
+		
+		exOneParamValueRec tempAudioEncodingMethod;
+		for(int i=0; i < 2; i++)
+		{
+			tempAudioEncodingMethod.intValue = audioMethods[i];
+			utf16ncpy(paramString, audioMethodStrings[i], 255);
+			exportParamSuite->AddConstrainedValuePair(exID, gIdx, OggAudioMethod, &tempAudioEncodingMethod, paramString);
+		}
+		
+		
+		// Quality
+		utf16ncpy(paramString, "Quality", 255);
+		exportParamSuite->SetParamName(exID, gIdx, OggAudioQuality, paramString);
+		
+		exParamValues qualityValues;
+		exportParamSuite->GetParamValue(exID, gIdx, OggAudioQuality, &qualityValues);
+
+		qualityValues.rangeMin.floatValue = -0.1f;
+		qualityValues.rangeMax.floatValue = 1.f;
+		
+		exportParamSuite->ChangeParam(exID, gIdx, OggAudioQuality, &qualityValues);
+
+
+		// Bitrate
+		utf16ncpy(paramString, "Bitrate (kb/s)", 255);
+		exportParamSuite->SetParamName(exID, gIdx, OggAudioBitrate, paramString);
+		
+		exParamValues bitrateValues;
+		exportParamSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &bitrateValues);
+
+		bitrateValues.rangeMin.intValue = 1;
+		bitrateValues.rangeMax.intValue = 1000;
+		
+		exportParamSuite->ChangeParam(exID, gIdx, OggAudioBitrate, &bitrateValues);
 	}
-	
-	
-	// Quality
-	utf16ncpy(paramString, "Quality", 255);
-	exportParamSuite->SetParamName(exID, gIdx, OggAudioQuality, paramString);
-	
-	exParamValues qualityValues;
-	exportParamSuite->GetParamValue(exID, gIdx, OggAudioQuality, &qualityValues);
+	else if(fileType == FLAC_ID)
+	{
+		// Sample Size
+		utf16ncpy(paramString, "Sample Size", 255);
+		exportParamSuite->SetParamName(exID, gIdx, ADBEAudioSampleType, paramString);
+		
+		int sampleSizes[] = { 8, 16, 24, 32 };
+		
+		const char *sampleSizeStrings[] = { "8-bit", "16-bit", "24-bit", "32-bit" };
+		
+		
+		exportParamSuite->ClearConstrainedValues(exID, gIdx, ADBEAudioSampleType);
+		
+		exOneParamValueRec tempSampleType;
+		
+		for(csSDK_int32 i=0; i < 4; i++)
+		{
+			tempSampleType.intValue = sampleSizes[i];
+			utf16ncpy(paramString, sampleSizeStrings[i], 255);
+			exportParamSuite->AddConstrainedValuePair(exID, gIdx, ADBEAudioSampleType, &tempSampleType, paramString);
+		}
+		
+		
+		// Audio codec settings
+		utf16ncpy(paramString, "FLAC settings", 255);
+		exportParamSuite->SetParamName(exID, gIdx, ADBEAudioCodecGroup, paramString);
+		
+		
+		// Compression Level
+		utf16ncpy(paramString, "Compression Level", 255);
+		exportParamSuite->SetParamName(exID, gIdx, FLACAudioCompression, paramString);
+		
+		exParamValues FLACcompressionValues;
+		exportParamSuite->GetParamValue(exID, gIdx, FLACAudioCompression, &FLACcompressionValues);
 
-	qualityValues.rangeMin.floatValue = -0.1f;
-	qualityValues.rangeMax.floatValue = 1.f;
-	
-	exportParamSuite->ChangeParam(exID, gIdx, OggAudioQuality, &qualityValues);
-
-
-	// Bitrate
-	utf16ncpy(paramString, "Bitrate (kb/s)", 255);
-	exportParamSuite->SetParamName(exID, gIdx, OggAudioBitrate, paramString);
-	
-	exParamValues bitrateValues;
-	exportParamSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &bitrateValues);
-
-	bitrateValues.rangeMin.intValue = 1;
-	bitrateValues.rangeMax.intValue = 1000;
-	
-	exportParamSuite->ChangeParam(exID, gIdx, OggAudioBitrate, &bitrateValues);
+		FLACcompressionValues.rangeMin.intValue = 0;
+		FLACcompressionValues.rangeMax.intValue = 8;
+		
+		exportParamSuite->ChangeParam(exID, gIdx, FLACAudioCompression, &FLACcompressionValues);
+	}
 	
 	
 	return result;
@@ -857,6 +1226,7 @@ exSDKGetParamSummary(
 	std::string summary1, summary2, summary3;
 
 	csSDK_uint32	exID	= summaryRecP->exporterPluginID;
+	csSDK_uint32	fileType = privateData->fileType;
 	csSDK_int32		gIdx	= 0;
 	
 	// Standard settings
@@ -864,11 +1234,6 @@ exSDKGetParamSummary(
 	paramSuite->GetParamValue(exID, gIdx, ADBEAudioRatePerSecond, &sampleRateP);
 	paramSuite->GetParamValue(exID, gIdx, ADBEAudioNumChannels, &channelTypeP);
 
-	exParamValues audioMethodP, audioQualityP, audioBitrateP;
-	paramSuite->GetParamValue(exID, gIdx, OggAudioMethod, &audioMethodP);
-	paramSuite->GetParamValue(exID, gIdx, OggAudioQuality, &audioQualityP);
-	paramSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &audioBitrateP);
-	
 
 	std::stringstream stream1;
 	
@@ -882,13 +1247,30 @@ exSDKGetParamSummary(
 						"Stereo");
 	stream2 << ", ";
 	
-	if(audioMethodP.value.intValue == OGG_BITRATE)
+	
+	if(fileType == Ogg_ID)
 	{
-		stream2 << audioBitrateP.value.intValue << " kbps";
+		exParamValues audioMethodP, audioQualityP, audioBitrateP;
+		paramSuite->GetParamValue(exID, gIdx, OggAudioMethod, &audioMethodP);
+		paramSuite->GetParamValue(exID, gIdx, OggAudioQuality, &audioQualityP);
+		paramSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &audioBitrateP);
+	
+		if(audioMethodP.value.intValue == OGG_BITRATE)
+		{
+			stream2 << audioBitrateP.value.intValue << " kbps";
+		}
+		else
+		{
+			stream2 << "Quality " << audioQualityP.value.floatValue;
+		}
 	}
-	else
+	else if(fileType == FLAC_ID)
 	{
-		stream2 << "Quality " << audioQualityP.value.floatValue;
+		exParamValues sampleSizeP, FLACcompressionP;
+		paramSuite->GetParamValue(exID, gIdx, ADBEAudioSampleType, &sampleSizeP);
+		paramSuite->GetParamValue(exID, gIdx, FLACAudioCompression, &FLACcompressionP);
+		
+		stream2 << sampleSizeP.value.intValue << "-bit, Level " << FLACcompressionP.value.intValue;
 	}
 	
 	
@@ -917,22 +1299,30 @@ exSDKValidateParamChanged (
 	PrSDKExportParamSuite	*paramSuite		= privateData->exportParamSuite;
 	
 	csSDK_int32 exID = validateParamChangedRecP->exporterPluginID;
+	csSDK_int32 fileType = validateParamChangedRecP->fileType;
 	csSDK_int32 gIdx = validateParamChangedRecP->multiGroupIndex;
 	
 	std::string param = validateParamChangedRecP->changedParamIdentifier;
 	
-	if(param == OggAudioMethod)
+	if(fileType == Ogg_ID)
 	{
-		exParamValues audioMethodP, audioQualityP, audioBitrateP;
-		paramSuite->GetParamValue(exID, gIdx, OggAudioMethod, &audioMethodP);
-		paramSuite->GetParamValue(exID, gIdx, OggAudioQuality, &audioQualityP);
-		paramSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &audioBitrateP);
-		
-		audioQualityP.hidden = (audioMethodP.value.intValue == OGG_BITRATE);
-		audioBitrateP.hidden = !audioQualityP.hidden;
-		
-		paramSuite->ChangeParam(exID, gIdx, OggAudioQuality, &audioQualityP);
-		paramSuite->ChangeParam(exID, gIdx, OggAudioBitrate, &audioBitrateP);
+		if(param == OggAudioMethod)
+		{
+			exParamValues audioMethodP, audioQualityP, audioBitrateP;
+			paramSuite->GetParamValue(exID, gIdx, OggAudioMethod, &audioMethodP);
+			paramSuite->GetParamValue(exID, gIdx, OggAudioQuality, &audioQualityP);
+			paramSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &audioBitrateP);
+			
+			audioQualityP.hidden = (audioMethodP.value.intValue == OGG_BITRATE);
+			audioBitrateP.hidden = !audioQualityP.hidden;
+			
+			paramSuite->ChangeParam(exID, gIdx, OggAudioQuality, &audioQualityP);
+			paramSuite->ChangeParam(exID, gIdx, OggAudioBitrate, &audioBitrateP);
+		}
+	}
+	else if(fileType == FLAC_ID)
+	{
+	
 	}
 
 	return malNoError;

@@ -30,7 +30,7 @@
 
 // ------------------------------------------------------------------------
 //
-// Ogg plug-in for Premiere
+// Ogg Vorbis (and FLAC) plug-in for Premiere
 //
 // by Brendan Bolles <brendan@fnordware.com>
 //
