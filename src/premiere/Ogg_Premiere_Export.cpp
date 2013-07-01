@@ -968,7 +968,7 @@ exSDKGenerateDefaultParams(
 		// Bitrate
 		exParamValues audioBitrateValues;
 		audioBitrateValues.structVersion = 1;
-		audioBitrateValues.rangeMin.intValue = 1;
+		audioBitrateValues.rangeMin.intValue = 40;
 		audioBitrateValues.rangeMax.intValue = 1000;
 		audioBitrateValues.value.intValue = 128;
 		audioBitrateValues.disabled = kPrFalse;
@@ -1170,7 +1170,7 @@ exSDKPostProcessParams(
 		exParamValues bitrateValues;
 		exportParamSuite->GetParamValue(exID, gIdx, OggAudioBitrate, &bitrateValues);
 
-		bitrateValues.rangeMin.intValue = 1;
+		bitrateValues.rangeMin.intValue = 40;
 		bitrateValues.rangeMax.intValue = 1000;
 		
 		exportParamSuite->ChangeParam(exID, gIdx, OggAudioBitrate, &bitrateValues);
