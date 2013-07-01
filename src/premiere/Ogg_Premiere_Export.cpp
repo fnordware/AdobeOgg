@@ -431,9 +431,9 @@ AudioClip(double in, unsigned int max_val)
 	// My understanding with audio is that it uses the full signed range.
 	// So an 8-bit sample is allowed to go from -128 to 127.  It's not
 	// balanced in positive and negative, but I guess that's OK?
-	return (in > 0 ?
-				(in < (max_val - 1) ? in : (max_val - 1)) :
-				(in > (-(int)max_val) ? in : (-(int)max_val) )
+	return (in >= 0 ?
+				(in < (max_val - 1) ? (in + 0.5) : (max_val - 1)) :
+				(in > (-(int)max_val) ? (in - 0.5) : (-(int)max_val) )
 			);
 			
 	// BTW, the need to cast max_val into an int before the - operation
