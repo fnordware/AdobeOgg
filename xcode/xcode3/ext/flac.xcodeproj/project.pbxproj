@@ -48,13 +48,6 @@
 		2A137627178082AB00E15D71 /* fixed.c in Sources */ = {isa = PBXBuildFile; fileRef = 2A137438178082AB00E15D71 /* fixed.c */; };
 		2A137628178082AB00E15D71 /* float.c in Sources */ = {isa = PBXBuildFile; fileRef = 2A13743A178082AB00E15D71 /* float.c */; };
 		2A137629178082AB00E15D71 /* format.c in Sources */ = {isa = PBXBuildFile; fileRef = 2A13743B178082AB00E15D71 /* format.c */; };
-		2A13762A178082AB00E15D71 /* bitreader_asm.nasm in Sources */ = {isa = PBXBuildFile; fileRef = 2A13743D178082AB00E15D71 /* bitreader_asm.nasm */; };
-		2A13762B178082AB00E15D71 /* cpu_asm.nasm in Sources */ = {isa = PBXBuildFile; fileRef = 2A13743E178082AB00E15D71 /* cpu_asm.nasm */; };
-		2A13762C178082AB00E15D71 /* fixed_asm.nasm in Sources */ = {isa = PBXBuildFile; fileRef = 2A13743F178082AB00E15D71 /* fixed_asm.nasm */; };
-		2A13762D178082AB00E15D71 /* lpc_asm-unrolled.nasm in Sources */ = {isa = PBXBuildFile; fileRef = 2A137440178082AB00E15D71 /* lpc_asm-unrolled.nasm */; };
-		2A13762E178082AB00E15D71 /* lpc_asm.nasm in Sources */ = {isa = PBXBuildFile; fileRef = 2A137441178082AB00E15D71 /* lpc_asm.nasm */; };
-		2A13762F178082AB00E15D71 /* nasm.h in Headers */ = {isa = PBXBuildFile; fileRef = 2A137443178082AB00E15D71 /* nasm.h */; };
-		2A137630178082AB00E15D71 /* stream_encoder_asm.nasm in Sources */ = {isa = PBXBuildFile; fileRef = 2A137444178082AB00E15D71 /* stream_encoder_asm.nasm */; };
 		2A137631178082AB00E15D71 /* all.h in Headers */ = {isa = PBXBuildFile; fileRef = 2A137448178082AB00E15D71 /* all.h */; };
 		2A137632178082AB00E15D71 /* bitmath.h in Headers */ = {isa = PBXBuildFile; fileRef = 2A137449178082AB00E15D71 /* bitmath.h */; };
 		2A137633178082AB00E15D71 /* bitreader.h in Headers */ = {isa = PBXBuildFile; fileRef = 2A13744A178082AB00E15D71 /* bitreader.h */; };
@@ -462,7 +455,6 @@
 				2A13760F178082AB00E15D71 /* win_utf8_io.h in Headers */,
 				2A137610178082AB00E15D71 /* file_utils_flac.h in Headers */,
 				2A137611178082AB00E15D71 /* metadata_utils.h in Headers */,
-				2A13762F178082AB00E15D71 /* nasm.h in Headers */,
 				2A137631178082AB00E15D71 /* all.h in Headers */,
 				2A137632178082AB00E15D71 /* bitmath.h in Headers */,
 				2A137633178082AB00E15D71 /* bitreader.h in Headers */,
@@ -514,7 +506,7 @@
 /* Begin PBXProject section */
 		08FB7793FE84155DC02AAC07 /* Project object */ = {
 			isa = PBXProject;
-			buildConfigurationList = 1DEB91EF08733DB70010E9CD /* Build configuration list for PBXProject "libflac" */;
+			buildConfigurationList = 1DEB91EF08733DB70010E9CD /* Build configuration list for PBXProject "flac" */;
 			compatibilityVersion = "Xcode 3.1";
 			developmentRegion = English;
 			hasScannedForEncodings = 1;
@@ -546,12 +538,6 @@
 				2A137627178082AB00E15D71 /* fixed.c in Sources */,
 				2A137628178082AB00E15D71 /* float.c in Sources */,
 				2A137629178082AB00E15D71 /* format.c in Sources */,
-				2A13762A178082AB00E15D71 /* bitreader_asm.nasm in Sources */,
-				2A13762B178082AB00E15D71 /* cpu_asm.nasm in Sources */,
-				2A13762C178082AB00E15D71 /* fixed_asm.nasm in Sources */,
-				2A13762D178082AB00E15D71 /* lpc_asm-unrolled.nasm in Sources */,
-				2A13762E178082AB00E15D71 /* lpc_asm.nasm in Sources */,
-				2A137630178082AB00E15D71 /* stream_encoder_asm.nasm in Sources */,
 				2A137648178082AB00E15D71 /* lpc.c in Sources */,
 				2A137649178082AB00E15D71 /* md5.c in Sources */,
 				2A13764A178082AB00E15D71 /* memory.c in Sources */,
@@ -658,7 +644,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		1DEB91EF08733DB70010E9CD /* Build configuration list for PBXProject "libflac" */ = {
+		1DEB91EF08733DB70010E9CD /* Build configuration list for PBXProject "flac" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1DEB91F008733DB70010E9CD /* Debug */,
