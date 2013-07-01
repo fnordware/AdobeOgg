@@ -1,0 +1,11 @@
+// This is our FCC filetype
+#define pOgg 0x4F676756		// Hex description 'OggV'
+
+// For compatibility with Premiere 6.x, we still define a real IMPT resource
+1000 IMPT DISCARDABLE
+BEGIN
+	0x0000
+	pOgg 
+END
+
+	
