@@ -47,8 +47,9 @@ extern "C" {
 
 }
 
+#ifdef GOT_FLAC
 #include "FLAC++/decoder.h"
-
+#endif
 
 #include <assert.h>
 #include <math.h>
@@ -147,7 +148,7 @@ static ov_callbacks g_ov_callbacks = { ogg_read_func, ogg_seek_func, NULL, ogg_t
 
 #pragma mark-
 
-
+#ifdef GOT_FLAC
 class OurDecoder : public FLAC::Decoder::Stream
 {
   public:
@@ -192,9 +193,9 @@ class OurDecoder : public FLAC::Decoder::Stream
 OurDecoder::read_callback(FLAC__byte buffer[], size_t *bytes)
 {
 #ifdef PRWIN_ENV	
-	DWORD count = size, out;
+	DWORD count = *bytes, out;
 	
-	BOOL result = ReadFile(_fp, (LPVOID)ptr, count, &out, NULL);
+	BOOL result = ReadFile(_fp, (LPVOID)buffer, count, &out, NULL);
 
 	*bytes = out;
 	
@@ -234,7 +235,7 @@ OurDecoder::seek_callback(FLAC__uint64 absolute_byte_offset)
 OurDecoder::length_callback(FLAC__uint64 *stream_length)
 {
 #ifdef PRWIN_ENV
-	LARGE_INTEGER lpos
+	LARGE_INTEGER lpos;
 
 	BOOL result = GetFileSizeEx(_fp, &lpos);
 	
@@ -329,7 +330,7 @@ OurDecoder::metadata_callback(const ::FLAC__StreamMetadata *metadata)
 		_bits_per_sample = metadata->data.stream_info.bits_per_sample;
 	}
 }
-
+#endif // GOT_FLAC
 
 #pragma mark-
 
@@ -352,7 +353,9 @@ typedef struct
 	float					audioSampleRate;
 	
 	OggVorbis_File			*vf;
+#ifdef GOT_FLAC
 	OurDecoder				*flac;
+#endif
 	
 } ImporterLocalRec8, *ImporterLocalRec8Ptr, **ImporterLocalRec8H;
 
@@ -422,7 +425,7 @@ SDKGetIndFormat(
 				#endif
 			}while(0);
 			break;
-
+#ifdef GOT_FLAC
 		case 1:	
 			do{	
 				char formatname[255]	= "FLAC";
@@ -447,7 +450,7 @@ SDKGetIndFormat(
 				#endif
 			}while(0);
 			break;
-
+#endif
 		default:
 			result = imBadFormatIndex;
 	}
@@ -485,7 +488,9 @@ SDKOpenFile8(
 		localRecP = reinterpret_cast<ImporterLocalRec8Ptr>( *localRecH );
 		
 		localRecP->vf = NULL;
+#ifdef GOT_FLAC
 		localRecP->flac = NULL;
+#endif
 		
 		localRecP->importerID = SDKfileOpenRec8->inImporterID;
 		localRecP->fileType = SDKfileOpenRec8->fileinfo.filetype;
@@ -581,6 +586,7 @@ SDKOpenFile8(
 			else
 				result = imBadHeader;
 		}
+#ifdef GOT_FLAC
 		else if(localRecP->fileType == FLAC_filetype)
 		{
 			try
@@ -598,6 +604,7 @@ SDKOpenFile8(
 				result = imBadHeader;
 			}
 		}
+#endif
 	}
 	
 	// close file and delete private data if we got a bad file
@@ -649,7 +656,7 @@ SDKQuietFile(
 			
 			localRecP->vf = NULL;
 		}
-		
+#ifdef GOT_FLAC
 		if(localRecP->flac)
 		{
 			localRecP->flac->finish();
@@ -658,7 +665,7 @@ SDKQuietFile(
 			
 			localRecP->flac = NULL;
 		}
-
+#endif
 		stdParms->piSuites->memFuncs->unlockHandle(reinterpret_cast<char**>(ldataH));
 
 	#ifdef PRWIN_ENV
@@ -768,6 +775,7 @@ SDKGetInfo8(
 													
 			SDKFileInfo8->audDuration			= ov_pcm_total(&vf, 0);
 		}
+#ifdef GOT_FLAC
 		else if(localRecP->fileType == FLAC_filetype)
 		{
 			assert(localRecP->flac);
@@ -799,6 +807,7 @@ SDKGetInfo8(
 				result = imBadFile;
 			}
 		}
+#endif
 		
 		localRecP->audioSampleRate			= SDKFileInfo8->audInfo.sampleRate;
 		localRecP->numChannels				= SDKFileInfo8->audInfo.numChannels;
@@ -881,6 +890,7 @@ SDKImportAudio7(
 				}
 			}
 		}
+#ifdef GOT_FLAC
 		else if(localRecP->fileType == FLAC_filetype)
 		{
 			try
@@ -937,6 +947,7 @@ SDKImportAudio7(
 				result = imDecompressionError;
 			}
 		}
+#endif
 	}
 	
 					

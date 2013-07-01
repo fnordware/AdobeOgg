@@ -57,9 +57,9 @@ extern "C" {
 
 }
 
-
+#ifdef GOT_FLAC
 #include "FLAC++/encoder.h"
-
+#endif
 
 
 #include <sstream>
@@ -151,6 +151,7 @@ exSDKStartup(
 		
 		return exportReturn_IterateExporter;
 	}
+#ifdef GOT_FLAC
 	else if(infoRecP->exportReqIndex == 1)
 	{
 		infoRecP->fileType			= FLAC_ID;
@@ -175,7 +176,8 @@ exSDKStartup(
 		return exportReturn_IterateExporter;	// Supposed to return exportReturn_IterateExporterDone here
 												// but then Premiere doesn't recognize FLAC.  It's a bug.
 	}
-	
+#endif
+
 	return exportReturn_IterateExporterDone;
 }
 
@@ -360,6 +362,7 @@ typedef enum {
 
 #define FLACAudioCompression "FLACAudioCompression"
 
+#ifdef GOT_FLAC
 class OurEncoder : public FLAC::Encoder::Stream
 {
   public:
@@ -436,6 +439,7 @@ AudioClip(double in, unsigned int max_val)
 	// BTW, the need to cast max_val into an int before the - operation
 	// was the source of a horrific bug I gave myself.  Sigh.
 }
+#endif
 
 #define OV_OK 0
 
@@ -638,6 +642,7 @@ exSDKExport(
 		else
 			result = exportReturn_InternalError;
 	}
+#ifdef GOT_FLAC
 	else if(fileType == FLAC_ID)
 	{
 		exParamValues sampleSizeP, FLACcompressionP;
@@ -762,6 +767,7 @@ exSDKExport(
 		
 		audioSuite->ReleaseAudioRenderer(exID, audioRenderID);
 	}
+#endif
 
 	return result;
 }
