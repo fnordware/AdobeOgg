@@ -1,7 +1,7 @@
 ext
 ===
 
-This directory holds git submodules that point to libraries needed by the WebM and WebP plug-ins.
+This directory holds git submodules that point to libraries needed by the Ogg plug-ins.
 
 You will need to manually add the following to this directory because the owners don't have a git repository I can embed:
 
