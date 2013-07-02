@@ -43,43 +43,37 @@
 
 #include "Theora_Premiere_Export.h"
 
-extern "C" {
-//#include "vpx/vpx_encoder.h"
-}
 
 typedef enum {
-	WEBM_CODEC_VP8 = 0,
-	WEBM_CODEC_VP9
-} WebM_Video_Codec;
+	THEORA_CODEC_VP8 = 0,
+	THEORA_CODEC_VP9
+} Theora_Video_Codec;
 
 typedef enum {
-	WEBM_METHOD_QUALITY = 0,
-	WEBM_METHOD_BITRATE,
-	WEBM_METHOD_VBR
-} WebM_Video_Method;
+	THEORA_METHOD_QUALITY = 0,
+	THEORA_METHOD_BITRATE,
+	THEORA_METHOD_VBR
+} Theora_Video_Method;
 
 typedef enum {
-	WEBM_ENCODING_REALTIME = 0,
-	WEBM_ENCODING_GOOD,
-	WEBM_ENCODING_BEST
-} WebM_Video_Encoding;
+	THEORA_ENCODING_REALTIME = 0,
+	THEORA_ENCODING_GOOD,
+	THEORA_ENCODING_BEST
+} Theora_Video_Encoding;
 
 
-#define ADBEVideoAlpha		"ADBEVideoAlpha"
 
+#define TheoraPluginVersion		"TheoraPluginVersion"
 
-#define WebMPluginVersion	"WebMPluginVersion"
+#define ADBEVideoMatchSource	"ADBEVideoMatchSource"
 
-#define ADBEVideoMatchSource "ADBEVideoMatchSource"
+#define TheoraVideoMethod		"TheoraVideoMethod"
+#define TheoraVideoQuality		"TheoraVideoQuality"
+#define TheoraVideoBitrate		"TheoraVideoBitrate"
+#define TheoraVideoEncoding		"TheoraVideoEncoding"
 
-#define WebMVideoCodec		"WebMVideoCodec"
-#define WebMVideoMethod		"WebMVideoMethod"
-#define WebMVideoQuality	"WebMVideoQuality"
-#define WebMVideoBitrate	"WebMVideoBitrate"
-#define WebMVideoEncoding	"WebMVideoEncoding"
-
-#define WebMCustomGroup		"WebMCustomGroup"
-#define WebMCustomArgs		"WebMCustomArgs"
+//#define TheoraCustomGroup		"TheoraCustomGroup"
+//#define TheoraCustomArgs		"TheoraCustomArgs"
 
 
 typedef enum {
@@ -87,9 +81,9 @@ typedef enum {
 	OGG_BITRATE
 } Ogg_Method;
 
-#define WebMAudioMethod	"WebMAudioMethod"
-#define WebMAudioQuality	"WebMAudioQuality"
-#define WebMAudioBitrate	"WebMAudioBitrate"
+#define TheoraAudioMethod	"TheoraAudioMethod"
+#define TheoraAudioQuality	"TheoraAudioQuality"
+#define TheoraAudioBitrate	"TheoraAudioBitrate"
 
 
 

@@ -73,7 +73,6 @@ exSDKQueryOutputSettings(
 								frameRate,
 								pixelAspectRatio,
 								fieldType,
-								//alpha,
 								methodP,
 								videoQualityP,
 								videoBitrateP,
@@ -104,12 +103,12 @@ exSDKQueryOutputSettings(
 		paramSuite->GetParamValue(exID, mgroupIndex, ADBEVideoFieldType, &fieldType);
 		outputSettingsP->outVideoFieldType = fieldType.value.intValue;
 		
-		paramSuite->GetParamValue(exID, mgroupIndex, WebMVideoMethod, &methodP);
-		paramSuite->GetParamValue(exID, mgroupIndex, WebMVideoQuality, &videoQualityP);
-		paramSuite->GetParamValue(exID, mgroupIndex, WebMVideoBitrate, &videoBitrateP);
-		paramSuite->GetParamValue(exID, mgroupIndex, WebMAudioQuality, &audioQualityP);
+		paramSuite->GetParamValue(exID, mgroupIndex, TheoraVideoMethod, &methodP);
+		paramSuite->GetParamValue(exID, mgroupIndex, TheoraVideoQuality, &videoQualityP);
+		paramSuite->GetParamValue(exID, mgroupIndex, TheoraVideoBitrate, &videoBitrateP);
+		paramSuite->GetParamValue(exID, mgroupIndex, TheoraAudioQuality, &audioQualityP);
 		
-		if(methodP.value.intValue == WEBM_METHOD_QUALITY)
+		if(methodP.value.intValue == THEORA_METHOD_QUALITY)
 		{
 			int bitsPerFrameUncompressed = (width.value.intValue * height.value.intValue) * 3 * 8;
 			int qual = videoQualityP.value.intValue;
@@ -122,8 +121,6 @@ exSDKQueryOutputSettings(
 		}
 		else
 			videoBitrate += videoBitrateP.value.intValue;
-		
-		//paramSuite->GetParamValue(exID, mgroupIndex, ADBEVideoAlpha, &alpha);
 	}
 	
 	if(outputSettingsP->inExportAudio)
@@ -323,60 +320,24 @@ exSDKGenerateDefaultParams(
 	exportParamSuite->AddParam(exID, gIdx, ADBEBasicVideoGroup, &fpsParam);
 
 
-	// Alpha channel
-	exParamValues alphaValues;
-	alphaValues.structVersion = 1;
-	alphaValues.value.intValue = kPrFalse;
-	alphaValues.disabled = kPrFalse;
-	alphaValues.hidden = kPrFalse;
-	
-	exNewParamInfo alphaParam;
-	alphaParam.structVersion = 1;
-	strncpy(alphaParam.identifier, ADBEVideoAlpha, 255);
-	alphaParam.paramType = exParamType_bool;
-	alphaParam.flags = exParamFlag_none;
-	alphaParam.paramValues = alphaValues;
-	
-	//exportParamSuite->AddParam(exID, gIdx, ADBEBasicVideoGroup, &alphaParam);
-
-	
 	// Video Codec Settings Group
 	utf16ncpy(groupString, "Codec settings", 255);
 	exportParamSuite->AddParamGroup(exID, gIdx,
 									ADBEVideoTabGroup, ADBEVideoCodecGroup, groupString,
 									kPrFalse, kPrFalse, kPrFalse);
 									
-	// Codec
-	exParamValues codecValues;
-	codecValues.structVersion = 1;
-	codecValues.rangeMin.intValue = WEBM_CODEC_VP8;
-	codecValues.rangeMax.intValue = WEBM_CODEC_VP9;
-	codecValues.value.intValue = WEBM_CODEC_VP8;
-	codecValues.disabled = kPrFalse;
-	codecValues.hidden = kPrFalse;
-	
-	exNewParamInfo codecParam;
-	codecParam.structVersion = 1;
-	strncpy(codecParam.identifier, WebMVideoCodec, 255);
-	codecParam.paramType = exParamType_int;
-	codecParam.flags = exParamFlag_none;
-	codecParam.paramValues = codecValues;
-	
-	exportParamSuite->AddParam(exID, gIdx, ADBEVideoCodecGroup, &codecParam);
-	
-	
 	// Method
 	exParamValues methodValues;
 	methodValues.structVersion = 1;
-	methodValues.rangeMin.intValue = WEBM_METHOD_QUALITY;
-	methodValues.rangeMax.intValue = WEBM_METHOD_VBR;
-	methodValues.value.intValue = WEBM_METHOD_QUALITY;
+	methodValues.rangeMin.intValue = THEORA_METHOD_QUALITY;
+	methodValues.rangeMax.intValue = THEORA_METHOD_VBR;
+	methodValues.value.intValue = THEORA_METHOD_QUALITY;
 	methodValues.disabled = kPrFalse;
 	methodValues.hidden = kPrFalse;
 	
 	exNewParamInfo methodParam;
 	methodParam.structVersion = 1;
-	strncpy(methodParam.identifier, WebMVideoMethod, 255);
+	strncpy(methodParam.identifier, TheoraVideoMethod, 255);
 	methodParam.paramType = exParamType_int;
 	methodParam.flags = exParamFlag_none;
 	methodParam.paramValues = methodValues;
@@ -388,14 +349,14 @@ exSDKGenerateDefaultParams(
 	exParamValues videoQualityValues;
 	videoQualityValues.structVersion = 1;
 	videoQualityValues.rangeMin.intValue = 0;
-	videoQualityValues.rangeMax.intValue = 100;
-	videoQualityValues.value.intValue = 50;
+	videoQualityValues.rangeMax.intValue = 10;
+	videoQualityValues.value.intValue = 5;
 	videoQualityValues.disabled = kPrFalse;
 	videoQualityValues.hidden = kPrFalse;
 	
 	exNewParamInfo videoQualityParam;
 	videoQualityParam.structVersion = 1;
-	strncpy(videoQualityParam.identifier, WebMVideoQuality, 255);
+	strncpy(videoQualityParam.identifier, TheoraVideoQuality, 255);
 	videoQualityParam.paramType = exParamType_int;
 	videoQualityParam.flags = exParamFlag_slider;
 	videoQualityParam.paramValues = videoQualityValues;
@@ -414,7 +375,7 @@ exSDKGenerateDefaultParams(
 	
 	exNewParamInfo videoBitrateParam;
 	videoBitrateParam.structVersion = 1;
-	strncpy(videoBitrateParam.identifier, WebMVideoBitrate, 255);
+	strncpy(videoBitrateParam.identifier, TheoraVideoBitrate, 255);
 	videoBitrateParam.paramType = exParamType_int;
 	videoBitrateParam.flags = exParamFlag_slider;
 	videoBitrateParam.paramValues = videoBitrateValues;
@@ -425,15 +386,15 @@ exSDKGenerateDefaultParams(
 	// Encoding
 	exParamValues vidEncodingValues;
 	vidEncodingValues.structVersion = 1;
-	vidEncodingValues.rangeMin.intValue = WEBM_ENCODING_REALTIME;
-	vidEncodingValues.rangeMax.intValue = WEBM_ENCODING_BEST;
-	vidEncodingValues.value.intValue = WEBM_ENCODING_GOOD;
+	vidEncodingValues.rangeMin.intValue = THEORA_ENCODING_REALTIME;
+	vidEncodingValues.rangeMax.intValue = THEORA_ENCODING_BEST;
+	vidEncodingValues.value.intValue = THEORA_ENCODING_GOOD;
 	vidEncodingValues.disabled = kPrFalse;
 	vidEncodingValues.hidden = kPrFalse;
 	
 	exNewParamInfo vidEncodingParam;
 	vidEncodingParam.structVersion = 1;
-	strncpy(vidEncodingParam.identifier, WebMVideoEncoding, 255);
+	strncpy(vidEncodingParam.identifier, TheoraVideoEncoding, 255);
 	vidEncodingParam.paramType = exParamType_int;
 	vidEncodingParam.flags = exParamFlag_none;
 	vidEncodingParam.paramValues = vidEncodingValues;
@@ -446,26 +407,26 @@ exSDKGenerateDefaultParams(
 	versionValues.structVersion = 1;
 	versionValues.rangeMin.intValue = 0;
 	versionValues.rangeMax.intValue = INT_MAX;
-	versionValues.value.intValue = WEBM_PLUGIN_VERSION_MAJOR << 16 |
-									WEBM_PLUGIN_VERSION_MINOR << 8 |
-									WEBM_PLUGIN_VERSION_BUILD;
+	versionValues.value.intValue = THEORA_PLUGIN_VERSION_MAJOR << 16 |
+									THEORA_PLUGIN_VERSION_MINOR << 8 |
+									THEORA_PLUGIN_VERSION_BUILD;
 	versionValues.disabled = kPrTrue;
 	versionValues.hidden = kPrTrue;
 	
 	exNewParamInfo versionParam;
 	versionParam.structVersion = 1;
-	strncpy(versionParam.identifier, WebMPluginVersion, 255);
+	strncpy(versionParam.identifier, TheoraPluginVersion, 255);
 	versionParam.paramType = exParamType_int;
 	versionParam.flags = exParamFlag_none;
 	versionParam.paramValues = versionValues;
 	
-	exportParamSuite->AddParam(exID, gIdx, WebMPluginVersion, &versionParam);
+	exportParamSuite->AddParam(exID, gIdx, TheoraPluginVersion, &versionParam);
 	
 		
 	// Custom Settings Group
-	utf16ncpy(groupString, "Custom settings", 255);
+/*	utf16ncpy(groupString, "Custom settings", 255);
 	exportParamSuite->AddParamGroup(exID, gIdx,
-									ADBEVideoTabGroup, WebMCustomGroup, groupString,
+									ADBEVideoTabGroup, TheoraCustomGroup, groupString,
 									kPrFalse, kPrFalse, kPrFalse);
 									
 	// Custom field
@@ -476,13 +437,13 @@ exSDKGenerateDefaultParams(
 	
 	exNewParamInfo customArgParam;
 	customArgParam.structVersion = 1;
-	strncpy(customArgParam.identifier, WebMCustomArgs, 255);
+	strncpy(customArgParam.identifier, TheoraCustomArgs, 255);
 	customArgParam.paramType = exParamType_string;
 	customArgParam.flags = exParamFlag_multiLine;
 	customArgParam.paramValues = customArgValues;
 	
-	exportParamSuite->AddParam(exID, gIdx, WebMCustomGroup, &customArgParam);
-
+	exportParamSuite->AddParam(exID, gIdx, TheoraCustomGroup, &customArgParam);
+*/
 
 
 	// Audio Tab
@@ -548,7 +509,7 @@ exSDKGenerateDefaultParams(
 	
 	exNewParamInfo audioMethodParam;
 	audioMethodParam.structVersion = 1;
-	strncpy(audioMethodParam.identifier, WebMAudioMethod, 255);
+	strncpy(audioMethodParam.identifier, TheoraAudioMethod, 255);
 	audioMethodParam.paramType = exParamType_int;
 	audioMethodParam.flags = exParamFlag_none;
 	audioMethodParam.paramValues = audioMethodValues;
@@ -559,15 +520,15 @@ exSDKGenerateDefaultParams(
 	// Quality
 	exParamValues audioQualityValues;
 	audioQualityValues.structVersion = 1;
-	audioQualityValues.rangeMin.floatValue = -0.1f;
-	audioQualityValues.rangeMax.floatValue = 1.f;
-	audioQualityValues.value.floatValue = 0.5f;
+	audioQualityValues.rangeMin.floatValue = -1.f;
+	audioQualityValues.rangeMax.floatValue = 10.f;
+	audioQualityValues.value.floatValue = 5.f;
 	audioQualityValues.disabled = kPrFalse;
 	audioQualityValues.hidden = kPrFalse;
 	
 	exNewParamInfo audioQualityParam;
 	audioQualityParam.structVersion = 1;
-	strncpy(audioQualityParam.identifier, WebMAudioQuality, 255);
+	strncpy(audioQualityParam.identifier, TheoraAudioQuality, 255);
 	audioQualityParam.paramType = exParamType_float;
 	audioQualityParam.flags = exParamFlag_slider;
 	audioQualityParam.paramValues = audioQualityValues;
@@ -586,7 +547,7 @@ exSDKGenerateDefaultParams(
 	
 	exNewParamInfo audioBitrateParam;
 	audioBitrateParam.structVersion = 1;
-	strncpy(audioBitrateParam.identifier, WebMAudioBitrate, 255);
+	strncpy(audioBitrateParam.identifier, TheoraAudioBitrate, 255);
 	audioBitrateParam.paramType = exParamType_int;
 	audioBitrateParam.flags = exParamFlag_slider;
 	audioBitrateParam.paramValues = audioBitrateValues;
@@ -754,119 +715,92 @@ exSDKPostProcessParams(
 	}
 	
 	
-	// Alpha channel
-	utf16ncpy(paramString, "Include Alpha Channel", 255);
-	//exportParamSuite->SetParamName(exID, gIdx, ADBEVideoAlpha, paramString);
-	
-	
 	// Video codec settings
 	utf16ncpy(paramString, "Codec settings", 255);
 	exportParamSuite->SetParamName(exID, gIdx, ADBEVideoCodecGroup, paramString);
 	
 	
-	// Codec
-	utf16ncpy(paramString, "Codec", 255);
-	exportParamSuite->SetParamName(exID, gIdx, WebMVideoCodec, paramString);
-	
-	
-	WebM_Video_Codec codecs[] = {	WEBM_CODEC_VP8,
-									WEBM_CODEC_VP9 };
-	
-	const char *codecStrings[]	= {	"VP8",
-									"VP9" };
-
-	exportParamSuite->ClearConstrainedValues(exID, gIdx, WebMVideoCodec);
-	
-	exOneParamValueRec tempCodec;
-	for(int i=0; i < 2; i++)
-	{
-		tempCodec.intValue = codecs[i];
-		utf16ncpy(paramString, codecStrings[i], 255);
-		exportParamSuite->AddConstrainedValuePair(exID, gIdx, WebMVideoCodec, &tempCodec, paramString);
-	}
-	
-	
 	// Method
 	utf16ncpy(paramString, "Method", 255);
-	exportParamSuite->SetParamName(exID, gIdx, WebMVideoMethod, paramString);
+	exportParamSuite->SetParamName(exID, gIdx, TheoraVideoMethod, paramString);
 	
 	
-	int vidMethods[] = {	WEBM_METHOD_QUALITY,
-							WEBM_METHOD_BITRATE,
-							WEBM_METHOD_VBR };
+	int vidMethods[] = {	THEORA_METHOD_QUALITY,
+							THEORA_METHOD_BITRATE,
+							THEORA_METHOD_VBR };
 	
 	const char *vidMethodStrings[]	= {	"Constant Quality",
 										"Constant Bitrate",
 										"Variable Bitrate (2-pass)" };
 
-	exportParamSuite->ClearConstrainedValues(exID, gIdx, WebMVideoMethod);
+	exportParamSuite->ClearConstrainedValues(exID, gIdx, TheoraVideoMethod);
 	
 	exOneParamValueRec tempEncodingMethod;
 	for(int i=0; i < 3; i++)
 	{
 		tempEncodingMethod.intValue = vidMethods[i];
 		utf16ncpy(paramString, vidMethodStrings[i], 255);
-		exportParamSuite->AddConstrainedValuePair(exID, gIdx, WebMVideoMethod, &tempEncodingMethod, paramString);
+		exportParamSuite->AddConstrainedValuePair(exID, gIdx, TheoraVideoMethod, &tempEncodingMethod, paramString);
 	}
 	
 	
 	// Quality
 	utf16ncpy(paramString, "Quality", 255);
-	exportParamSuite->SetParamName(exID, gIdx, WebMVideoQuality, paramString);
+	exportParamSuite->SetParamName(exID, gIdx, TheoraVideoQuality, paramString);
 	
 	exParamValues videoQualityValues;
-	exportParamSuite->GetParamValue(exID, gIdx, WebMVideoQuality, &videoQualityValues);
+	exportParamSuite->GetParamValue(exID, gIdx, TheoraVideoQuality, &videoQualityValues);
 
 	videoQualityValues.rangeMin.intValue = 0;
-	videoQualityValues.rangeMax.intValue = 100;
+	videoQualityValues.rangeMax.intValue = 10;
 	
-	exportParamSuite->ChangeParam(exID, gIdx, WebMVideoQuality, &videoQualityValues);
+	exportParamSuite->ChangeParam(exID, gIdx, TheoraVideoQuality, &videoQualityValues);
 	
 	
 	// Bitrate
 	utf16ncpy(paramString, "Bitrate (kb/s)", 255);
-	exportParamSuite->SetParamName(exID, gIdx, WebMVideoBitrate, paramString);
+	exportParamSuite->SetParamName(exID, gIdx, TheoraVideoBitrate, paramString);
 	
 	exParamValues bitrateValues;
-	exportParamSuite->GetParamValue(exID, gIdx, WebMVideoBitrate, &bitrateValues);
+	exportParamSuite->GetParamValue(exID, gIdx, TheoraVideoBitrate, &bitrateValues);
 
 	bitrateValues.rangeMin.intValue = 1;
 	bitrateValues.rangeMax.intValue = 9999;
 	
-	exportParamSuite->ChangeParam(exID, gIdx, WebMVideoBitrate, &bitrateValues);
+	exportParamSuite->ChangeParam(exID, gIdx, TheoraVideoBitrate, &bitrateValues);
 	
 	
 	// Encoding
 	utf16ncpy(paramString, "Encoding", 255);
-	exportParamSuite->SetParamName(exID, gIdx, WebMVideoEncoding, paramString);
+	exportParamSuite->SetParamName(exID, gIdx, TheoraVideoEncoding, paramString);
 	
 	
-	int vidQualities[] = {	WEBM_ENCODING_REALTIME,
-							WEBM_ENCODING_GOOD,
-							WEBM_ENCODING_BEST };
+	int vidQualities[] = {	THEORA_ENCODING_REALTIME,
+							THEORA_ENCODING_GOOD,
+							THEORA_ENCODING_BEST };
 	
 	const char *vidQualityStrings[]	= {	"Realtime",
 										"Good",
 										"Best" };
 
-	exportParamSuite->ClearConstrainedValues(exID, gIdx, WebMVideoEncoding);
+	exportParamSuite->ClearConstrainedValues(exID, gIdx, TheoraVideoEncoding);
 	
 	exOneParamValueRec tempEncodingQuality;
 	for(int i=0; i < 3; i++)
 	{
 		tempEncodingQuality.intValue = vidQualities[i];
 		utf16ncpy(paramString, vidQualityStrings[i], 255);
-		exportParamSuite->AddConstrainedValuePair(exID, gIdx, WebMVideoEncoding, &tempEncodingQuality, paramString);
+		exportParamSuite->AddConstrainedValuePair(exID, gIdx, TheoraVideoEncoding, &tempEncodingQuality, paramString);
 	}
 	
 	
 	// Custom settings
-	utf16ncpy(paramString, "Custom settings", 255);
-	exportParamSuite->SetParamName(exID, gIdx, WebMCustomGroup, paramString);
+/*	utf16ncpy(paramString, "Custom settings", 255);
+	exportParamSuite->SetParamName(exID, gIdx, TheoraCustomGroup, paramString);
 	
 	utf16ncpy(paramString, "Custom args", 255);
-	exportParamSuite->SetParamName(exID, gIdx, WebMCustomArgs, paramString);
-	
+	exportParamSuite->SetParamName(exID, gIdx, TheoraCustomArgs, paramString);
+*/	
 	
 	
 	
@@ -926,7 +860,7 @@ exSDKPostProcessParams(
 
 	// Method
 	utf16ncpy(paramString, "Method", 255);
-	exportParamSuite->SetParamName(exID, gIdx, WebMAudioMethod, paramString);
+	exportParamSuite->SetParamName(exID, gIdx, TheoraAudioMethod, paramString);
 	
 	
 	int audioMethods[] = {	OGG_QUALITY,
@@ -935,41 +869,41 @@ exSDKPostProcessParams(
 	const char *audioMethodStrings[]	= {	"Quality",
 											"Bitrate" };
 
-	exportParamSuite->ClearConstrainedValues(exID, gIdx, WebMAudioMethod);
+	exportParamSuite->ClearConstrainedValues(exID, gIdx, TheoraAudioMethod);
 	
 	exOneParamValueRec tempAudioEncodingMethod;
 	for(int i=0; i < 2; i++)
 	{
 		tempAudioEncodingMethod.intValue = audioMethods[i];
 		utf16ncpy(paramString, audioMethodStrings[i], 255);
-		exportParamSuite->AddConstrainedValuePair(exID, gIdx, WebMAudioMethod, &tempAudioEncodingMethod, paramString);
+		exportParamSuite->AddConstrainedValuePair(exID, gIdx, TheoraAudioMethod, &tempAudioEncodingMethod, paramString);
 	}
 	
 	
 	// Quality
 	utf16ncpy(paramString, "Quality", 255);
-	exportParamSuite->SetParamName(exID, gIdx, WebMAudioQuality, paramString);
+	exportParamSuite->SetParamName(exID, gIdx, TheoraAudioQuality, paramString);
 	
 	exParamValues qualityValues;
-	exportParamSuite->GetParamValue(exID, gIdx, WebMAudioQuality, &qualityValues);
+	exportParamSuite->GetParamValue(exID, gIdx, TheoraAudioQuality, &qualityValues);
 
-	qualityValues.rangeMin.floatValue = -0.1f;
-	qualityValues.rangeMax.floatValue = 1.f;
+	qualityValues.rangeMin.floatValue = -1.f;
+	qualityValues.rangeMax.floatValue = 10.f;
 	
-	exportParamSuite->ChangeParam(exID, gIdx, WebMAudioQuality, &qualityValues);
+	exportParamSuite->ChangeParam(exID, gIdx, TheoraAudioQuality, &qualityValues);
 	
 
 	// Bitrate
 	utf16ncpy(paramString, "Bitrate (kb/s)", 255);
-	exportParamSuite->SetParamName(exID, gIdx, WebMAudioBitrate, paramString);
+	exportParamSuite->SetParamName(exID, gIdx, TheoraAudioBitrate, paramString);
 	
 	exParamValues audioBitrateValues;
-	exportParamSuite->GetParamValue(exID, gIdx, WebMAudioBitrate, &audioBitrateValues);
+	exportParamSuite->GetParamValue(exID, gIdx, TheoraAudioBitrate, &audioBitrateValues);
 
 	audioBitrateValues.rangeMin.intValue = 40;
 	audioBitrateValues.rangeMax.intValue = 1000;
 	
-	exportParamSuite->ChangeParam(exID, gIdx, WebMAudioBitrate, &audioBitrateValues);
+	exportParamSuite->ChangeParam(exID, gIdx, TheoraAudioBitrate, &audioBitrateValues);
 
 	return result;
 }
@@ -989,29 +923,27 @@ exSDKGetParamSummary(
 	csSDK_int32		gIdx	= 0;
 	
 	// Standard settings
-	exParamValues width, height, frameRate, alpha;
+	exParamValues width, height, frameRate;
 	
 	paramSuite->GetParamValue(exID, gIdx, ADBEVideoWidth, &width);
 	paramSuite->GetParamValue(exID, gIdx, ADBEVideoHeight, &height);
 	paramSuite->GetParamValue(exID, gIdx, ADBEVideoFPS, &frameRate);
-	//paramSuite->GetParamValue(exID, mgroupIndex, ADBEVideoAlpha, &alpha);
 	
 	exParamValues sampleRateP, channelTypeP;
 	paramSuite->GetParamValue(exID, gIdx, ADBEAudioRatePerSecond, &sampleRateP);
 	paramSuite->GetParamValue(exID, gIdx, ADBEAudioNumChannels, &channelTypeP);
 
-	exParamValues codecP, methodP, videoQualityP, videoBitrateP, vidEncodingP;
-	paramSuite->GetParamValue(exID, gIdx, WebMVideoCodec, &codecP);
-	paramSuite->GetParamValue(exID, gIdx, WebMVideoMethod, &methodP);
-	paramSuite->GetParamValue(exID, gIdx, WebMVideoQuality, &videoQualityP);
-	paramSuite->GetParamValue(exID, gIdx, WebMVideoBitrate, &videoBitrateP);
-	paramSuite->GetParamValue(exID, gIdx, WebMVideoEncoding, &vidEncodingP);
+	exParamValues methodP, videoQualityP, videoBitrateP, vidEncodingP;
+	paramSuite->GetParamValue(exID, gIdx, TheoraVideoMethod, &methodP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraVideoQuality, &videoQualityP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraVideoBitrate, &videoBitrateP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraVideoEncoding, &vidEncodingP);
 	
 
 	exParamValues audioMethodP, audioQualityP, audioBitrateP;
-	paramSuite->GetParamValue(exID, gIdx, WebMAudioMethod, &audioMethodP);
-	paramSuite->GetParamValue(exID, gIdx, WebMAudioQuality, &audioQualityP);
-	paramSuite->GetParamValue(exID, gIdx, WebMAudioBitrate, &audioBitrateP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraAudioMethod, &audioMethodP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraAudioQuality, &audioQualityP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraAudioBitrate, &audioBitrateP);
 	
 	// oh boy, figure out frame rate
 	PrTime frameRates[] = {	10, 15, 23,
@@ -1056,8 +988,6 @@ exSDKGetParamSummary(
 	if(frame_rate_index >= 0 && frame_rate_index < 10) 
 		stream1 << ", " << frameRateStrings[frame_rate_index] << " fps";
 	
-	//stream1 << ", " << (alpha.value.intValue ? "Alpha" : "No Alpha");
-	
 	summary1 = stream1.str();
 	
 	
@@ -1083,11 +1013,11 @@ exSDKGetParamSummary(
 	summary2 = stream2.str();
 	
 	
-	WebM_Video_Method method = (WebM_Video_Method)methodP.value.intValue;
+	Theora_Video_Method method = (Theora_Video_Method)methodP.value.intValue;
 	
 	std::stringstream stream3;
 	
-	if(method == WEBM_METHOD_QUALITY)
+	if(method == THEORA_METHOD_QUALITY)
 	{
 		stream3 << "Quality " << videoQualityP.value.intValue;
 	}
@@ -1095,15 +1025,13 @@ exSDKGetParamSummary(
 	{
 		stream3 << videoBitrateP.value.intValue << " kb/s";
 		
-		if(method == WEBM_METHOD_VBR)
+		if(method == THEORA_METHOD_VBR)
 			stream3 << " VBR";
 	}
 	
-	stream3 << (codecP.value.intValue == WEBM_CODEC_VP9 ? ", VP9" : ", VP8");	
-
-	if(vidEncodingP.value.intValue == WEBM_ENCODING_REALTIME)
+	if(vidEncodingP.value.intValue == THEORA_ENCODING_REALTIME)
 		stream3 << ", Realtime";
-	else if(vidEncodingP.value.intValue == WEBM_ENCODING_BEST)
+	else if(vidEncodingP.value.intValue == THEORA_ENCODING_BEST)
 		stream3 << ", Best";
 	
 	summary3 = stream3.str();
@@ -1152,32 +1080,32 @@ exSDKValidateParamChanged (
 		paramSuite->ChangeParam(exID, gIdx, ADBEVideoFieldType, &fieldTypeP);
 		paramSuite->ChangeParam(exID, gIdx, ADBEVideoFPS, &frameRateP);
 	}
-	else if(param == WebMVideoMethod)
+	else if(param == TheoraVideoMethod)
 	{
 		exParamValues methodValue, videoQualityValue, videoBitrateValue;
 		
-		paramSuite->GetParamValue(exID, gIdx, WebMVideoMethod, &methodValue);
-		paramSuite->GetParamValue(exID, gIdx, WebMVideoQuality, &videoQualityValue);
-		paramSuite->GetParamValue(exID, gIdx, WebMVideoBitrate, &videoBitrateValue);
+		paramSuite->GetParamValue(exID, gIdx, TheoraVideoMethod, &methodValue);
+		paramSuite->GetParamValue(exID, gIdx, TheoraVideoQuality, &videoQualityValue);
+		paramSuite->GetParamValue(exID, gIdx, TheoraVideoBitrate, &videoBitrateValue);
 		
-		videoQualityValue.hidden = !(methodValue.value.intValue == WEBM_METHOD_QUALITY);
-		videoBitrateValue.hidden = (methodValue.value.intValue == WEBM_METHOD_QUALITY);
+		videoQualityValue.hidden = !(methodValue.value.intValue == THEORA_METHOD_QUALITY);
+		videoBitrateValue.hidden = (methodValue.value.intValue == THEORA_METHOD_QUALITY);
 		
-		paramSuite->ChangeParam(exID, gIdx, WebMVideoQuality, &videoQualityValue);
-		paramSuite->ChangeParam(exID, gIdx, WebMVideoBitrate, &videoBitrateValue);
+		paramSuite->ChangeParam(exID, gIdx, TheoraVideoQuality, &videoQualityValue);
+		paramSuite->ChangeParam(exID, gIdx, TheoraVideoBitrate, &videoBitrateValue);
 	}
-	else if(param == WebMAudioMethod)
+	else if(param == TheoraAudioMethod)
 	{
 		exParamValues audioMethodP, audioQualityP, audioBitrateP;
-		paramSuite->GetParamValue(exID, gIdx, WebMAudioMethod, &audioMethodP);
-		paramSuite->GetParamValue(exID, gIdx, WebMAudioQuality, &audioQualityP);
-		paramSuite->GetParamValue(exID, gIdx, WebMAudioBitrate, &audioBitrateP);
+		paramSuite->GetParamValue(exID, gIdx, TheoraAudioMethod, &audioMethodP);
+		paramSuite->GetParamValue(exID, gIdx, TheoraAudioQuality, &audioQualityP);
+		paramSuite->GetParamValue(exID, gIdx, TheoraAudioBitrate, &audioBitrateP);
 		
 		audioQualityP.hidden = (audioMethodP.value.intValue == OGG_BITRATE);
 		audioBitrateP.hidden = !audioQualityP.hidden;
 		
-		paramSuite->ChangeParam(exID, gIdx, WebMAudioQuality, &audioQualityP);
-		paramSuite->ChangeParam(exID, gIdx, WebMAudioBitrate, &audioBitrateP);
+		paramSuite->ChangeParam(exID, gIdx, TheoraAudioQuality, &audioQualityP);
+		paramSuite->ChangeParam(exID, gIdx, TheoraAudioBitrate, &audioBitrateP);
 	}
 
 	return malNoError;

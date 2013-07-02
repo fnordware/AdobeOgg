@@ -42,9 +42,7 @@
 
 extern "C" {
 
-#include "theora/theoradec.h"
-
-//#include <vorbis/codec.h>
+#include "theoraplay.h"
 
 }
 
@@ -58,104 +56,49 @@ extern "C" {
 	#include <mach/mach.h>
 #endif
 
-int g_num_cpus = 1;
 
-#undef assert
-static void assert(bool b)
+static long theora_read(THEORAPLAY_Io *io, void *buf, long buflen)
 {
-	bool c = b;
-	
-	if(!c)
-	{
-		b = c;
-	}
-}
-
-#define OV_OK	0
-#define OV_FALSE (-1)
-
-static size_t ogg_read_func(void *ptr, size_t size, size_t nmemb, void *datasource)
-{
-	imFileRef fp = static_cast<imFileRef>(datasource);
+	imFileRef fp = static_cast<imFileRef>(io->userdata);
 	
 #ifdef PRWIN_ENV	
-	DWORD count = size * nmemb, out;
+	DWORD count = buflen, out;
 	
-	BOOL result = ReadFile(fp, (LPVOID)ptr, count, &out, NULL);
+	BOOL result = ReadFile(fp, (LPVOID)buf, count, &out, NULL);
 
-	return (out / size);
+	return out;
 #else
-	ByteCount count = size * nmemb, out = 0;
+	ByteCount count = buflen, out = 0;
 	
-	OSErr result = FSReadFork(CAST_REFNUM(fp), fsAtMark, 0, count, ptr, &out);
+	OSErr result = FSReadFork(CAST_REFNUM(fp), fsAtMark, 0, count, buf, &out);
 
-	return (out / size);
+	return out;
 #endif
 }
 
-
-static int ogg_seek_func(void *datasource, ogg_int64_t offset, int whence)
+static void theora_close(THEORAPLAY_Io *io)
 {
-	imFileRef fp = static_cast<imFileRef>(datasource);
+	// Not gonna close, just move to the file beginning
+	imFileRef fp = static_cast<imFileRef>(io->userdata);
 	
 #ifdef PRWIN_ENV
 	LARGE_INTEGER lpos;
 
-	lpos.QuadPart = offset;
-
-	DWORD method = ( whence == SEEK_SET ? FILE_BEGIN :
-						whence == SEEK_CUR ? FILE_CURRENT :
-						whence == SEEK_END ? FILE_END :
-						FILE_CURRENT );
+	lpos.QuadPart = 0;
 
 #if _MSC_VER < 1300
-	DWORD pos = SetFilePointer(fp, lpos.u.LowPart, &lpos.u.HighPart, method);
+	DWORD pos = SetFilePointer(fp, lpos.u.LowPart, &lpos.u.HighPart, FILE_BEGIN);
 
 	BOOL result = (pos != 0xFFFFFFFF || NO_ERROR == GetLastError());
 #else
 	BOOL result = SetFilePointerEx(fp, lpos, NULL, method);
 #endif
-
-	return (result ? OV_OK : OV_FALSE);
 #else
-	UInt16 positionMode = ( whence == SEEK_SET ? fsFromStart :
-							whence == SEEK_CUR ? fsFromMark :
-							whence == SEEK_END ? fsFromLEOF :
-							fsFromMark );
-	
-	OSErr result = FSSetForkPosition(CAST_REFNUM(fp), positionMode, offset);
-
-	return (result == noErr ? OV_OK : OV_FALSE);
+	OSErr result = FSSetForkPosition(CAST_REFNUM(fp), fsFromStart, 0);
 #endif
 }
 
 
-static long ogg_tell_func(void *datasource)
-{
-	imFileRef fp = static_cast<imFileRef>(datasource);
-	
-#ifdef PRWIN_ENV
-	long pos;
-	LARGE_INTEGER lpos, zero;
-
-	zero.QuadPart = 0;
-
-	BOOL result = SetFilePointerEx(fp, zero, &lpos, FILE_CURRENT);
-
-	pos = lpos.QuadPart;
-	
-	return pos;
-#else
-	long pos;
-	SInt64 lpos;
-
-	OSErr result = FSGetForkPosition(CAST_REFNUM(fp), &lpos);
-	
-	pos = lpos;
-	
-	return pos;
-#endif
-}
 
 
 #if IMPORTMOD_VERSION <= IMPORTMOD_VERSION_9
@@ -165,22 +108,6 @@ typedef PrSDKPPixCacheSuite2 PrCacheSuite;
 typedef PrSDKPPixCacheSuite PrCacheSuite;
 #define PrCacheVersion	kPrSDKPPixCacheSuiteVersion
 #endif
-
-
-typedef struct TheoraCtx {
-	ogg_sync_state    oy;
-	ogg_page          og;
-	ogg_packet        op;
-	ogg_stream_state  to;
-	th_info           ti;
-	th_comment        tc;
-	th_setup_info    *ts;
-	th_dec_ctx       *td;
-	
-	bool have_video;
-	
-	TheoraCtx() : ts(NULL), td(NULL), have_video(false) {}
-} TheoraCtx;
 
 
 typedef struct
@@ -193,8 +120,6 @@ typedef struct
 	csSDK_int32				frameRateDen;
 	float					audioSampleRate;
 	int						numChannels;
-	
-	//TheoraCtx				*th;
 	
 	PlugMemoryFuncsPtr		memFuncs;
 	SPBasicSuite			*BasicSuite;
@@ -227,23 +152,6 @@ SDKInit(
 	
 	importInfo->avoidAudioConform	= kPrTrue;		// If I let Premiere conform the audio, I get silence when
 													// I try to play it in the program.  Seems like a bug to me.
-
-#ifdef PRMAC_ENV
-	// get number of CPUs using Mach calls
-	host_basic_info_data_t hostInfo;
-	mach_msg_type_number_t infoCount;
-	
-	infoCount = HOST_BASIC_INFO_COUNT;
-	host_info(mach_host_self(), HOST_BASIC_INFO, 
-			  (host_info_t)&hostInfo, &infoCount);
-	
-	g_num_cpus = hostInfo.avail_cpus;
-#else // WIN_ENV
-	SYSTEM_INFO systemInfo;
-	GetSystemInfo(&systemInfo);
-
-	g_num_cpus = systemInfo.dwNumberOfProcessors;
-#endif
 
 	return malNoError;
 }
@@ -290,189 +198,6 @@ SDKGetIndFormat(
 
 	return result;
 }
-
-
-static prMALError SetupTheora(TheoraCtx &ctx, imFileRef &fileRef)
-{
-	prMALError result = malNoError;
-
-	
-	ogg_seek_func(fileRef, 0, SEEK_SET);
-	
-
-	// all of this ripped right out of dump_video.c in libtheora
-
-	// we keep all this stuff in a stuct, but use references to maintain the 
-	// clean ogg style
-	
-	ogg_sync_state    &oy = ctx.oy;
-	ogg_page          &og = ctx.og;
-	ogg_packet        &op = ctx.op;
-	ogg_stream_state  &to = ctx.to;
-	th_info           &ti = ctx.ti;
-	th_comment        &tc = ctx.tc;
-	th_setup_info     *&ts = ctx.ts;
-	th_dec_ctx        *&td = ctx.td;
-	
-	
-	ogg_sync_init(&oy);
-	
-	th_comment_init(&tc);
-	th_info_init(&ti);
-	
-	
-	int stateflag = 0;
-	int theora_p = 0;
-	int theora_processing_headers = 0;
-			
-	while(!stateflag)
-	{
-		char *buffer = ogg_sync_buffer(&oy, 4096);
-		
-		int bytes = ogg_read_func(buffer, 1, 4096, fileRef);
-		
-		ogg_sync_wrote(&oy, bytes);
-		
-		if(bytes == 0)
-			break;
-		
-		while(ogg_sync_pageout(&oy, &og) > 0)
-		{
-			ogg_stream_state test;
-			
-			// is this a mandated initial header? If not, stop parsing
-			if( !ogg_page_bos(&og) )
-			{
-				// don't leak the page; get it into the appropriate stream
-				if(theora_p)
-					ogg_stream_pagein(&to, &og);
-					
-				stateflag = 1;
-				
-				break;
-			}
-			
-			ogg_stream_init(&test, ogg_page_serialno(&og));
-			
-			ogg_stream_pagein(&test, &og);
-			
-			int got_packet = ogg_stream_packetpeek(&test, &op);
-			
-			if(got_packet == 1 && !theora_p &&
-				(theora_processing_headers = th_decode_headerin(&ti, &tc, &ts, &op)) >= 0)
-			{
-				// it is theora -- save this stream state */
-				memcpy(&to, &test, sizeof(test));
-				
-				theora_p = 1;
-				
-				// Advance past the successfully processed header.
-				if(theora_processing_headers)
-				{
-					ogg_stream_packetout(&to, NULL);
-				}
-				else
-				{
-					// whatever it is, we don't care about it
-					ogg_stream_clear(&test);
-				}
-			}
-		}
-	}
-		
-	// we're expecting more header packets.
-	while(theora_p && theora_processing_headers && result == malNoError)
-	{
-		int ret;
-
-		// look for further theora headers
-		while(theora_processing_headers && (ret = ogg_stream_packetpeek(&to, &op)) && result == malNoError)
-		{
-			if(ret < 0)
-				continue;
-				
-			theora_processing_headers = th_decode_headerin(&ti, &tc, &ts, &op);
-			
-			if(theora_processing_headers < 0)
-			{
-				result = imBadHeader;
-			}
-			else if(theora_processing_headers > 0)
-			{
-				// Advance past the successfully processed header.
-				ogg_stream_packetout(&to, NULL);
-			}
-			
-			theora_p++;
-		}
-
-		//Stop now so we don't fail if there aren't enough pages in a short stream.
-		if(!(theora_p && theora_processing_headers))
-			break;
-
-		if(result == malNoError)
-		{
-			// The header pages/packets will arrive before anything else we
-			//   care about, or the stream is not obeying spec
-
-			if(ogg_sync_pageout(&oy, &og) > 0)
-			{
-				if(theora_p)
-					ogg_stream_pagein(&to, &og); // demux into the appropriate stream
-			}
-			else
-			{
-				// someone needs more data
-				char *buffer2 = ogg_sync_buffer(&oy, 4096);
-				
-				int bytes2 = ogg_read_func(buffer2, 1, 4096, fileRef);
-				
-				ogg_sync_wrote(&oy, bytes2);
-				
-				if(bytes2 == 0)
-				{
-					result = imBadFile;
-				}
-			}
-		}
-	}
-	
-	ctx.have_video = (theora_p > 0);
-	
-	return result;
-}
-
-
-static void TheoraSetdown(TheoraCtx &ctx)
-{
-	ogg_sync_state    &oy = ctx.oy;
-	ogg_page          &og = ctx.og;
-	ogg_packet        &op = ctx.op;
-	ogg_stream_state  &to = ctx.to;
-	th_info           &ti = ctx.ti;
-	th_comment        &tc = ctx.tc;
-	th_setup_info     *&ts = ctx.ts;
-	th_dec_ctx        *&td = ctx.td;
-
-	ogg_stream_clear(&to);
-	
-	if(ts)
-	{
-		th_setup_free(ts);
-		ts = NULL;
-	}
-	
-	if(td)
-	{
-		th_decode_free(td);
-		td = NULL;
-	}
-		
-	th_comment_clear(&tc);
-	th_info_clear(&ti);
-	ogg_sync_clear(&oy);
-}
-
 
 
 prMALError 
@@ -584,17 +309,6 @@ SDKOpenFile8(
 
 	}
 
-	if(result == malNoError)
-	{
-		assert(0 == ogg_tell_func(*SDKfileRef));
-		
-		
-		TheoraCtx ctx;
-				
-		result = SetupTheora(ctx, *SDKfileRef);
-		
-		TheoraSetdown(ctx);
-	}
 	
 	// close file and delete private data if we got a bad file
 	if(result != malNoError)
@@ -734,6 +448,43 @@ SDKAnalysis(
 }
 
 
+static void
+float_to_rational_fps(float fps, unsigned int *fps_num, unsigned int *fps_den)
+{
+	// known frame rates
+	static const int frameRateNumDens[10][2] = {{10, 1}, {15, 1}, {24000, 1001},
+												{24, 1}, {25, 1}, {30000, 1001},
+												{30, 1}, {50, 1}, {60000, 1001},
+												{60, 1}};
+
+	int match_index = -1;
+	double match_episilon = 999;
+
+	for(int i=0; i < 10; i++)
+	{
+		double rate = (double)frameRateNumDens[i][0] / (double)frameRateNumDens[i][1];
+		double episilon = fabs(fps - rate);
+
+		if(episilon < match_episilon)
+		{
+			match_index = i;
+			match_episilon = episilon;
+		}
+	}
+
+	if(match_index >=0 && match_episilon < 0.01)
+	{
+		*fps_num = frameRateNumDens[match_index][0];
+		*fps_den = frameRateNumDens[match_index][1];
+	}
+	else
+	{
+		*fps_num = (fps * 1000.0) + 0.5;
+		*fps_den = 1000;
+	}
+}
+
+#define MAX_FRAMES 9999
 
 prMALError 
 SDKGetInfo8(
@@ -763,68 +514,92 @@ SDKGetInfo8(
 	
 	if(localRecP)
 	{
-		TheoraCtx ctx;
+		THEORAPLAY_Io io = { theora_read, theora_close, fileAccessInfo8->fileref };
 		
-		th_info &ti = ctx.ti;
+		THEORAPLAY_Decoder *decoder = THEORAPLAY_startDecode(&io, MAX_FRAMES, THEORAPLAY_VIDFMT_IYUV);
 		
-		result = SetupTheora(ctx, fileAccessInfo8->fileref);
-		
-		
-		if(result == malNoError && ctx.have_video)
+		if(decoder)
 		{
-			PrPixelFormat pix_format = (ti.pixel_fmt == TH_PF_420 ? PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601 :
-										ti.pixel_fmt == TH_PF_422 ? PrPixelFormat_YUYV_422_8u_709 :
-										ti.pixel_fmt == TH_PF_444 ? PrPixelFormat_VUYA_4444_8u_709 :
-										PrPixelFormat_BGRA_4444_8u);
-		
-			// Video information
-			SDKFileInfo8->hasVideo				= kPrTrue;
-			SDKFileInfo8->vidInfo.subType		= pix_format;
-			SDKFileInfo8->vidInfo.imageWidth	= ti.pic_width;
-			SDKFileInfo8->vidInfo.imageHeight	= ti.pic_height;
-			SDKFileInfo8->vidInfo.depth			= 24;	// for RGB, no A
-			SDKFileInfo8->vidInfo.fieldType		= prFieldsUnknown; // Matroska talk about DefaultDecodedFieldDuration but...
-			SDKFileInfo8->vidInfo.isStill		= kPrFalse;
-			SDKFileInfo8->vidInfo.noDuration	= imNoDurationFalse;
-			SDKFileInfo8->vidDuration			= 10 * ti.fps_denominator;
-			SDKFileInfo8->vidScale				= ti.fps_numerator;
-			SDKFileInfo8->vidSampleSize			= ti.fps_denominator;
-
-			SDKFileInfo8->vidInfo.alphaType		= alphaNone;
-
-			SDKFileInfo8->vidInfo.pixelAspectNum = ti.aspect_numerator;
-			SDKFileInfo8->vidInfo.pixelAspectDen = ti.aspect_denominator;
+			int frames = 0;
 			
-			// store some values we want to get without going to the file
-			localRecP->width = SDKFileInfo8->vidInfo.imageWidth;
-			localRecP->height = SDKFileInfo8->vidInfo.imageHeight;
+			while(!THEORAPLAY_isInitialized(decoder))
+				usleep(10000);
+				
+			// only going to need TheoryPlay if there's video
+			if(THEORAPLAY_hasVideoStream(decoder))
+			{
+				
+				// This is really bad.  I have to decode the entire movie in order to find
+				// out how many frames there are.
+				while(THEORAPLAY_isDecoding(decoder))
+				{
+					const THEORAPLAY_VideoFrame *video = THEORAPLAY_getVideo(decoder);
+					
+					if(video)
+					{
+						if(frames == 0)
+						{
+							// Get video information
+							SDKFileInfo8->hasVideo				= kPrTrue;
+							SDKFileInfo8->vidInfo.subType		= PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601;
+							SDKFileInfo8->vidInfo.imageWidth	= video->width;
+							SDKFileInfo8->vidInfo.imageHeight	= video->height;
+							SDKFileInfo8->vidInfo.depth			= 24;	// for RGB, no A
+							SDKFileInfo8->vidInfo.fieldType		= prFieldsUnknown; // Matroska talk about DefaultDecodedFieldDuration but...
+							SDKFileInfo8->vidInfo.isStill		= kPrFalse;
+							SDKFileInfo8->vidInfo.noDuration	= imNoDurationFalse;
+							
+							unsigned int fps_num, fps_den;
+							float_to_rational_fps(video->fps, &fps_num, &fps_den);
+							
+							SDKFileInfo8->vidScale				= fps_num;
+							SDKFileInfo8->vidSampleSize			= fps_den;
 
-			localRecP->frameRateNum = SDKFileInfo8->vidScale;
-			localRecP->frameRateDen = SDKFileInfo8->vidSampleSize;
-		
+							SDKFileInfo8->vidInfo.alphaType		= alphaNone;
+							
+							// pixel aspect ratio should be available, but not exposed in TheoraPlay
+						}
+						
+						THEORAPLAY_freeVideo(video);
+						
+						frames++;
+					}
+					
+					
+					const THEORAPLAY_AudioPacket *audio = THEORAPLAY_getAudio(decoder);
+					
+					if(audio)
+					{
+						THEORAPLAY_freeAudio(audio);
+					}
+					
+					if (!video && !audio)
+						usleep(10000);
+				}
+			}
+			
+			
+			if( THEORAPLAY_decodingError(decoder) )
+			{
+				result = imBadFile;
+			}
+			else if(frames > 0)
+			{
+				SDKFileInfo8->vidDuration = frames * SDKFileInfo8->vidSampleSize;
+							
+
+				// store some values we want to get without going to the file
+				localRecP->width = SDKFileInfo8->vidInfo.imageWidth;
+				localRecP->height = SDKFileInfo8->vidInfo.imageHeight;
+
+				localRecP->frameRateNum = SDKFileInfo8->vidScale;
+				localRecP->frameRateDen = SDKFileInfo8->vidSampleSize;
+			}
+			else
+				result = imBadFile;
+			
+			THEORAPLAY_stopDecode(decoder);
 		}
-		
-		if(false) // audio
-		{
-		/*				// Audio information
-						SDKFileInfo8->hasAudio				= kPrTrue;
-						SDKFileInfo8->audInfo.numChannels	= pAudioTrack->GetChannels();
-						SDKFileInfo8->audInfo.sampleRate	= pAudioTrack->GetSamplingRate();
-						SDKFileInfo8->audInfo.sampleType	= bitDepth == 8 ? kPrAudioSampleType_8BitInt :
-																bitDepth == 16 ? kPrAudioSampleType_16BitInt :
-																bitDepth == 24 ? kPrAudioSampleType_24BitInt :
-																bitDepth == 32 ? kPrAudioSampleType_32BitFloat :
-																bitDepth == 64 ? kPrAudioSampleType_64BitFloat :
-																kPrAudioSampleType_Compressed;
-																
-						SDKFileInfo8->audDuration			= (uint64_t)SDKFileInfo8->audInfo.sampleRate * duration / 1000000000UL;
-						
-						
-						localRecP->audioSampleRate			= SDKFileInfo8->audInfo.sampleRate;
-						localRecP->numChannels				= SDKFileInfo8->audInfo.numChannels;
-*/		}
-
-		TheoraSetdown(ctx);
 	}
 		
 	stdParms->piSuites->memFuncs->unlockHandle(reinterpret_cast<char**>(ldataH));
@@ -878,38 +653,9 @@ SDKPreferredFrameSize(
 }
 
 
-static void stripe_decoded_422(th_ycbcr_buffer _dst, th_ycbcr_buffer _src, int _fragy0, int _fragy_end)
-{
-	for(int pli=0; pli < 3; pli++)
-	{
-		int yshift = (pli != 0 && !(true));
-		int y_end = (_fragy_end << 3 - yshift);
-
-		// An implemention intending to display this data would need to check the
-		// crop rectangle before proceeding.
-		for(int y = (_fragy0 << 3 - yshift); y < y_end; y++)
-		{
-			memcpy(_dst[pli].data + y * _dst[pli].stride, _src[pli].data + y * _src[pli].stride, _src[pli].width);
-		}
-	}
-}
-
-static void stripe_decoded_420(th_ycbcr_buffer _dst, th_ycbcr_buffer _src, int _fragy0, int _fragy_end)
-{
-	for(int pli=0; pli < 3; pli++)
-	{
-		int yshift = (pli != 0 && !(false));
-		int y_end = (_fragy_end << 3 - yshift);
-
-		// An implemention intending to display this data would need to check the
-		// crop rectangle before proceeding.
-		for(int y = (_fragy0 << 3 - yshift); y < y_end; y++)
-		{
-			memcpy(_dst[pli].data + y * _dst[pli].stride, _src[pli].data + y * _src[pli].stride, _src[pli].width);
-		}
-	}
-}
-
+// Set to the half the size of the number of frames you think Premiere
+// will actually keep in its cache.
+#define FRAME_REACH 60
 
 static prMALError 
 SDKGetSourceVideo(
@@ -970,135 +716,124 @@ SDKGetSourceVideo(
 		prSetRect(&theRect, 0, 0, frameFormat->inFrameWidth, frameFormat->inFrameHeight);
 		
 
+		THEORAPLAY_Io io = { theora_read, theora_close, fileRef };
 		
-		if(true)
+		THEORAPLAY_Decoder *decoder = THEORAPLAY_startDecode(&io, MAX_FRAMES, THEORAPLAY_VIDFMT_IYUV);
+		
+		if(decoder)
 		{
-			TheoraCtx ctx;
+			const int start_frame = theFrame - FRAME_REACH;
+			const int end_frame = theFrame + FRAME_REACH;
+		
+			int frame = 0;
 			
-			ogg_sync_state    &oy = ctx.oy;
-			ogg_page          &og = ctx.og;
-			ogg_packet        &op = ctx.op;
-			ogg_stream_state  &to = ctx.to;
-			th_info           &ti = ctx.ti;
-			th_comment        &tc = ctx.tc;
-			th_setup_info     *&ts = ctx.ts;
-			th_dec_ctx        *&td = ctx.td;
 			
-			result = SetupTheora(ctx, fileRef);
-			
-			if(result == malNoError)
+			while(THEORAPLAY_isDecoding(decoder) && frame <= end_frame)
 			{
-				assert(ctx.have_video);
+				const THEORAPLAY_VideoFrame *video = THEORAPLAY_getVideo(decoder);
 				
-				td = th_decode_alloc(&ti, ts);
-				
-				
-				// this is their open_video() function
-				th_ycbcr_buffer ycbcr;
-				
-				const bool chroma_each_row = (ti.pixel_fmt == TH_PF_444); // (ti.pixel_fmt & 1)
-				const bool chroma_each_line = (ti.pixel_fmt == TH_PF_422 || ti.pixel_fmt == TH_PF_444); // (ti.pixel_fmt & 2)
-				
-				for(int pli=0; pli < 3; pli++)
+				if(video)
 				{
-					int xshift = (pli !=0 && !chroma_each_row);
-					int yshift = (pli !=0 && !chroma_each_line);
-					
-					ycbcr[pli].data = (unsigned char *)malloc((ti.frame_width >> xshift) * (ti.frame_height >> yshift) * sizeof(char));
-					
-					ycbcr[pli].stride = ti.frame_width >> xshift;
-					ycbcr[pli].width = ti.frame_width >> xshift;
-					ycbcr[pli].height= ti.frame_height >> yshift;
-				}
-				
-				
-				th_stripe_callback cb;
-				
-				cb.ctx = ycbcr;
-				
-				if(chroma_each_line)
-					cb.stripe_decoded = (th_stripe_decoded_func)stripe_decoded_422;
-				else
-					cb.stripe_decoded = (th_stripe_decoded_func)stripe_decoded_420;
-					
-				
-				th_decode_ctl(td, TH_DECCTL_SET_STRIPE_CB, &cb, sizeof(cb));
-				
-				// end of open_video()
-				
+					// This is really bad.  I have to decode everything up to the requested frame.
+					// In order to make it less wasteful, I cache frames with Premiere.  But I
+					// don't think Premiere will keep all my frames in cache, so I'm guessing
+					// at the size with FRAME_REACH.  And at least I don't read all the way to the
+					// end every time to cache frames that Premiere will dump.  Really, my advice
+					// at this point is NOT to load long Theora movies into Premiere.  Firefox
+					// seems to be able to scan Theora pretty well, so I'm confident it can be
+					// done.  But true to its name, TheoraPlay only goes from the beginning,
+					// and so does the Theora sample.
+					if(frame >= start_frame)
+					{
+						PPixHand ppix;
+						localRecP->PPixCreatorSuite->CreatePPix(&ppix, PrPPixBufferAccess_ReadWrite, frameFormat->inPixelFormat, &theRect);
+						
+						if(frameFormat->inPixelFormat == PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709)
+						{
+							char *Y_PixelAddress, *U_PixelAddress, *V_PixelAddress;
+							csSDK_uint32 Y_RowBytes, U_RowBytes, V_RowBytes;
+							
+							localRecP->PPix2Suite->GetYUV420PlanarBuffers(ppix, PrPPixBufferAccess_ReadWrite,
+																			&Y_PixelAddress, &Y_RowBytes,
+																			&U_PixelAddress, &U_RowBytes,
+																			&V_PixelAddress, &V_RowBytes);
+																		
+							assert(frameFormat->inFrameHeight == video->height);
+							assert(frameFormat->inFrameWidth == video->width);
 
-				while(ogg_sync_pageout(&oy, &og) > 0)
-					ogg_stream_pagein(&to, &og);
-				
-				
-				while(1)
-				{
-					int frames = 0;
-					int videobuf_ready = 0;
-					ogg_int64_t videobuf_granulepos = -1;
-					double videobuf_time = 0;
-					
-					while(!videobuf_ready && ogg_stream_packetout(&to,&op) > 0)
-					{
-						// theora is one in, one out...
-						if( th_decode_packetin(td, &op, &videobuf_granulepos) >= 0 )
-						{
-							videobuf_time = th_granule_time(td, videobuf_granulepos);
-							videobuf_ready = 1;
-							frames++;
-						}
-					}
-					
-					if(!videobuf_ready)
-					{
-						// no data yet for somebody.  Grab another page
-						char *buffer = ogg_sync_buffer(&oy, 4096);
-						
-						int bytes = ogg_read_func(buffer, 1, 4096, fileRef);
-						
-						if(bytes == 0)
-							break;
-						
-						ogg_sync_wrote(&oy, bytes);
-						
-						while( ogg_sync_pageout(&oy,&og) > 0 )
-							ogg_stream_pagein(&to, &og);
-					}
-					else
-					{
-						// their video_write()
-						int x0 = 0;
-						int y0 = 0;
-						
-						int xend = ti.frame_width;
-						int yend = ti.frame_height;
-					
-						int hdec = 0;
-						int vdec = 0;
-						
-						for(int pli=0; pli < 3; pli++)
-						{
-							for(int i = (y0 >> vdec); i < (yend + vdec >> vdec); i++)
+							const int w = video->width;
+							const int h = video->height;
+							const unsigned char *y = (const unsigned char *)video->pixels;
+							const unsigned char *u = y + (w * h);
+							const unsigned char *v = u + (((w + 1) / 2) * ((h + 1) / 2));
+
+							for(int i = 0; i < h; i++)
 							{
-								// you've got uncompressee video here
+								unsigned char *prY = (unsigned char *)Y_PixelAddress + (Y_RowBytes * i);
 								
-								//fwrite(ycbcr[pli].data  +ycbcr[pli].stride * i + (x0>>hdec), 1,
-								//			(xend + hdec >> hdec) - (x0 >> hdec), outfile);
+								memcpy(prY, y, w * sizeof(unsigned char));
+								
+								y += w;
 							}
-
-							hdec = !(ti.pixel_fmt&1);
-							vdec = !(ti.pixel_fmt&2);
+							
+							for(int i = 0; i < ((h + 1) / 2); i++)
+							{
+								unsigned char *prU = (unsigned char *)U_PixelAddress + (U_RowBytes * i);
+								unsigned char *prV = (unsigned char *)V_PixelAddress + (V_RowBytes * i);
+								
+								memcpy(prU, u, ((w + 1) / 2) * sizeof(unsigned char));
+								memcpy(prV, v, ((w + 1) / 2) * sizeof(unsigned char));
+								
+								u += ((w + 1) / 2);
+								v += ((w + 1) / 2);
+							}
+							
+							localRecP->PPixCacheSuite->AddFrameToCache(	localRecP->importerID,
+																		0,
+																		ppix,
+																		frame,
+																		NULL,
+																		NULL);
+							
+							if(frame == theFrame)
+							{
+								*sourceVideoRec->outFrame = ppix;
+							}
+							else
+							{
+								// Premiere copied the frame to its cache, so we dispose ours.
+								// Very obvious memory leak if we don't.
+								localRecP->PPixSuite->Dispose(ppix);
+							}
 						}
+						else
+							assert(false); // looks like Premiere is happy to always give me this kind of buffer
 					}
+					
+					THEORAPLAY_freeVideo(video);
+					
+					frame++;
 				}
 				
-				for(int pli=0; pli < 3; pli++)
+				
+				const THEORAPLAY_AudioPacket *audio = THEORAPLAY_getAudio(decoder);
+				
+				if(audio)
 				{
-					free(ycbcr[pli].data);
+					THEORAPLAY_freeAudio(audio);
 				}
+				
+				if(!video && !audio)
+					usleep(10000);
 			}
 			
-			TheoraSetdown(ctx);
+			
+			if( THEORAPLAY_decodingError(decoder) )
+			{
+				result = imBadFile;
+			}
+			
+			THEORAPLAY_stopDecode(decoder);
 		}
 	}
 
@@ -1135,6 +870,8 @@ SDKImportAudio7(
 	if(true)
 	{
 		assert(audioRec7->position >= 0); // Do they really want contiguous samples?
+		
+		
 	}
 	
 					

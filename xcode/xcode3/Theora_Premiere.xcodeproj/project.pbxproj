@@ -15,6 +15,7 @@
 		2AAC361F1781D9C0008B1A61 /* Theora_Premiere_Import.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2AAC361B1781D9C0008B1A61 /* Theora_Premiere_Import.cpp */; };
 		2AAC368D1781DE79008B1A61 /* libtheoraenc.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2AAC368A1781DE73008B1A61 /* libtheoraenc.a */; };
 		2AAC368E1781DE79008B1A61 /* libtheoradec.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2AAC368C1781DE73008B1A61 /* libtheoradec.a */; };
+		2AF7BF211782FC4900B7E52A /* theoraplay.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF7BEFE1782FC4900B7E52A /* theoraplay.c */; };
 		8D01CCCE0486CAD60068D4B7 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08EA7FFBFE8413EDC02AAC07 /* Carbon.framework */; };
 /* End PBXBuildFile section */
 
@@ -51,35 +52,35 @@
 			isa = PBXContainerItemProxy;
 			containerPortal = 2AAC36811781DE73008B1A61 /* Theora.xcodeproj */;
 			proxyType = 2;
-			remoteGlobalIDString = 8D07F2C80486CC7A007CD1D0 /* Theora.framework */;
+			remoteGlobalIDString = 8D07F2C80486CC7A007CD1D0;
 			remoteInfo = Theora;
 		};
 		2AAC36891781DE73008B1A61 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 2AAC36811781DE73008B1A61 /* Theora.xcodeproj */;
 			proxyType = 2;
-			remoteGlobalIDString = 738837100B192732005C7A69 /* libtheoraenc.a */;
+			remoteGlobalIDString = 738837100B192732005C7A69;
 			remoteInfo = "libtheoraenc (static)";
 		};
 		2AAC368B1781DE73008B1A61 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 2AAC36811781DE73008B1A61 /* Theora.xcodeproj */;
 			proxyType = 2;
-			remoteGlobalIDString = 09C8F6430C82FBE500F72188 /* libtheoradec.a */;
+			remoteGlobalIDString = 09C8F6430C82FBE500F72188;
 			remoteInfo = "libtheoradec (static)";
 		};
 		2AAC368F1781DE82008B1A61 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 2AAC36811781DE73008B1A61 /* Theora.xcodeproj */;
 			proxyType = 1;
-			remoteGlobalIDString = 7388370F0B192732005C7A69 /* libtheoraenc (static) */;
+			remoteGlobalIDString = 7388370F0B192732005C7A69;
 			remoteInfo = "libtheoraenc (static)";
 		};
 		2AAC36911781DE82008B1A61 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 2AAC36811781DE73008B1A61 /* Theora.xcodeproj */;
 			proxyType = 1;
-			remoteGlobalIDString = 09C8F6420C82FBE500F72188 /* libtheoradec (static) */;
+			remoteGlobalIDString = 09C8F6420C82FBE500F72188;
 			remoteInfo = "libtheoradec (static)";
 		};
 /* End PBXContainerItemProxy section */
@@ -115,6 +116,9 @@
 		2AAC361B1781D9C0008B1A61 /* Theora_Premiere_Import.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Theora_Premiere_Import.cpp; sourceTree = "<group>"; };
 		2AAC361C1781D9C0008B1A61 /* Theora_Premiere_Import.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Theora_Premiere_Import.h; sourceTree = "<group>"; };
 		2AAC36811781DE73008B1A61 /* Theora.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = Theora.xcodeproj; path = ../../ext/libtheora/macosx/Theora.xcodeproj; sourceTree = SOURCE_ROOT; };
+		2AF7BEFE1782FC4900B7E52A /* theoraplay.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theoraplay.c; sourceTree = "<group>"; };
+		2AF7BEFF1782FC4900B7E52A /* theoraplay.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theoraplay.h; sourceTree = "<group>"; };
+		2AF7BF001782FC4900B7E52A /* theoraplay_cvtrgb.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theoraplay_cvtrgb.h; sourceTree = "<group>"; };
 		8D01CCD10486CAD60068D4B7 /* Theora_Premiere_Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Theora_Premiere_Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -138,6 +142,7 @@
 			isa = PBXGroup;
 			children = (
 				2A58AED3176CF23F00669435 /* premiere */,
+				2AF7BED71782FC4900B7E52A /* theoraplay */,
 				089C167CFE841241C02AAC07 /* Resources */,
 				2AAC36811781DE73008B1A61 /* Theora.xcodeproj */,
 				2A55321D176AA87700BE5A72 /* libogg.xcodeproj */,
@@ -218,6 +223,17 @@
 			);
 			name = Products;
 			sourceTree = "<group>";
+		};
+		2AF7BED71782FC4900B7E52A /* theoraplay */ = {
+			isa = PBXGroup;
+			children = (
+				2AF7BEFE1782FC4900B7E52A /* theoraplay.c */,
+				2AF7BEFF1782FC4900B7E52A /* theoraplay.h */,
+				2AF7BF001782FC4900B7E52A /* theoraplay_cvtrgb.h */,
+			);
+			name = theoraplay;
+			path = ../../ext/theoraplay;
+			sourceTree = SOURCE_ROOT;
 		};
 /* End PBXGroup section */
 
@@ -351,6 +367,7 @@
 				2AAC361D1781D9C0008B1A61 /* Theora_Premiere_Export_Params.cpp in Sources */,
 				2AAC361E1781D9C0008B1A61 /* Theora_Premiere_Export.cpp in Sources */,
 				2AAC361F1781D9C0008B1A61 /* Theora_Premiere_Import.cpp in Sources */,
+				2AF7BF211782FC4900B7E52A /* theoraplay.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

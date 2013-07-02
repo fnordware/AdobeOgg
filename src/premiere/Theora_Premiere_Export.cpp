@@ -54,14 +54,23 @@
 
 extern "C" {
 
-
-#include <vorbis/codec.h>
-#include <vorbis/vorbisenc.h>
+#include "theora/theoraenc.h"
+#include "vorbis/codec.h"
+#include "vorbis/vorbisenc.h"
 
 }
 
 
-
+#undef assert
+static void assert(bool q)
+{
+	bool a = q;
+	
+	if(!q)
+	{
+		q = a;
+	}
+}
 
 #pragma mark-
 
@@ -298,7 +307,7 @@ exSDKFileExtension(
 	exportStdParms					*stdParmsP, 
 	exQueryExportFileExtensionRec	*exportFileExtensionRecP)
 {
-	utf16ncpy(exportFileExtensionRecP->outFileExtension, "webm", 255);
+	utf16ncpy(exportFileExtensionRecP->outFileExtension, "ogv", 255);
 		
 	return malNoError;
 }
@@ -347,6 +356,910 @@ Convert16to8(const uint16 &v)
 }
 
 
+static
+int fetch_and_process_audio(const PrSDKSequenceAudioSuite *audioSuite, const csSDK_uint32 audioRenderID, csSDK_int32 maxBlip,
+ ogg_page *audiopage, ogg_stream_state *vo, vorbis_dsp_state *vd, vorbis_block *vb,
+ int &audioflag, int &audio_hz, long &begin_sec, long &begin_usec, long &end_sec, long &end_usec)
+ {
+  ogg_packet op;
+
+  prMALError result = malNoError;
+
+  static ogg_int64_t samples_sofar=0;
+  ogg_int64_t beginsample = audio_hz*(begin_sec+begin_usec*.000001);
+  ogg_int64_t endsample = audio_hz*(end_sec+end_usec*.000001);
+  
+  while(result == malNoError && !audioflag){
+    /* process any audio already buffered */
+    if(ogg_stream_pageout(vo,audiopage)>0) return 1;
+    if(ogg_stream_eos(vo))return 0;
+
+	  if(samples_sofar>=endsample && endsample>0)
+	  {
+		vorbis_analysis_wrote(vd,0);
+	  }
+	  else
+	  {
+		  /* read and process more audio */
+		  float **vorbis_buffer=vorbis_analysis_buffer(vd,maxBlip);
+			  
+		  result = audioSuite->GetAudio(audioRenderID, maxBlip, vorbis_buffer, false);
+			  
+		  vorbis_analysis_wrote(vd,maxBlip);
+	  }
+
+	  while(vorbis_analysis_blockout(vd,vb)==1){
+
+		/* analysis, assume we want to use bitrate management */
+		vorbis_analysis(vb,NULL);
+		vorbis_bitrate_addblock(vb);
+
+		/* weld packets into the bitstream */
+		while(vorbis_bitrate_flushpacket(vd,&op))
+		  ogg_stream_packetin(vo,&op);
+
+	  }
+		  
+	  samples_sofar += maxBlip;
+  }
+
+  return audioflag;
+}
+
+static
+size_t fread_buf(void *out_buf, size_t elemsz, size_t elem_num, PrMemoryPtr &buffer, size_t &buffer_pos)
+{
+	memcpy(out_buf, &buffer[buffer_pos], elemsz * elem_num);
+	
+	buffer_pos += (elemsz *  elem_num);
+	
+	return elem_num;
+}
+
+static int fseek_buf(size_t &buffer_pos, long pos, int whence)
+{
+	assert(whence == SEEK_SET);
+	
+	buffer_pos = pos;
+	
+	return 0;
+}
+
+static size_t fwrite_buf(const void *in_buf, size_t elemsz, size_t elem_num, PrMemoryPtr &buffer, size_t &buffer_size, PrSDKMemoryManagerSuite *memorySuite)
+{
+	if(buffer_size == 0)
+		buffer = memorySuite->NewPtr(elemsz * elem_num);
+	else
+		memorySuite->SetPtrSize(&buffer, buffer_size + (elemsz * elem_num));
+	
+	memcpy(&buffer[buffer_size], in_buf, (elemsz * elem_num));
+	
+	buffer_size += (elemsz * elem_num);
+	
+	return elem_num;
+}
+
+static
+int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_uint32 videoRenderID, SequenceRender_ParamsRec &renderParms, PrTime ticksPerSecond,
+ PrSDKPPixSuite *pixSuite, PrSDKPPix2Suite *pix2Suite, PrMemoryPtr &vbr_buffer, size_t &vbr_buffer_pos, size_t &vbr_buffer_size, PrSDKMemoryManagerSuite *memorySuite,int passno,
+ th_enc_ctx *td,ogg_packet *op, int &video_fps_n, int &video_fps_d, long &begin_sec, long &begin_usec, long &end_sec, long &end_usec,
+ size_t &y4m_dst_buf_sz, size_t &y4m_aux_buf_sz, int &pic_w, int &pic_h, int &dst_c_dec_h, int &dst_c_dec_v,
+ int &frame_state, ogg_int64_t &frames, unsigned char ** &yuvframe, th_ycbcr_buffer &ycbcr)
+ {
+  int                        ret;
+  int                        pic_sz;
+  int                        c_w;
+  int                        c_h;
+  int                        c_sz;
+  ogg_int64_t                beginframe;
+  ogg_int64_t                endframe;
+  beginframe=video_fps_n*(begin_sec+begin_usec*.000001)/video_fps_d;
+  endframe=video_fps_n*(end_sec+end_usec*.000001)/video_fps_d;
+  if(frame_state==-1){
+    /* initialize the double frame buffer */
+    yuvframe[0]=(unsigned char *)malloc(y4m_dst_buf_sz);
+    yuvframe[1]=(unsigned char *)malloc(y4m_dst_buf_sz);
+    yuvframe[2]=(unsigned char *)malloc(y4m_aux_buf_sz);
+    frame_state=0;
+  }
+  pic_sz=pic_w*pic_h;
+  c_w=(pic_w+dst_c_dec_h-1)/dst_c_dec_h;
+  c_h=(pic_h+dst_c_dec_v-1)/dst_c_dec_v;
+  c_sz=c_w*c_h;
+  /* read and process more video */
+  /* video strategy reads one frame ahead so we know when we're
+     at end of stream and can mark last video frame as such
+     (vorbis audio has to flush one frame past last video frame
+     due to overlap and thus doesn't need this extra work */
+
+  /* have two frame buffers full (if possible) before
+     proceeding.  after first pass and until eos, one will
+     always be full when we get here */
+  
+  for(;frame_state<2 && (frames<endframe || endframe<0);){
+  
+    SequenceRender_GetFrameReturnRec renderResult;
+  
+    PrTime render_time = frames * video_fps_d * ticksPerSecond / video_fps_n;
+    prMALError result = renderSuite->RenderVideoFrame(videoRenderID, render_time, &renderParms, kRenderCacheType_AllFrames, &renderResult);
+    if(result != malNoError)break;
+	
+	PrPixelFormat pixFormat;
+	prRect bounds;
+	csSDK_uint32 parN, parD;
+	
+	pixSuite->GetPixelFormat(renderResult.outFrame, &pixFormat);
+	pixSuite->GetBounds(renderResult.outFrame, &bounds);
+	pixSuite->GetPixelAspectRatio(renderResult.outFrame, &parN, &parD);
+	
+	const int width = bounds.right - bounds.left;
+	const int height = bounds.bottom - bounds.top;
+	
+	if(pixFormat == PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709)
+	{
+		char *Y_PixelAddress, *U_PixelAddress, *V_PixelAddress;
+		csSDK_uint32 Y_RowBytes, U_RowBytes, V_RowBytes;
+		
+		pix2Suite->GetYUV420PlanarBuffers(renderResult.outFrame, PrPPixBufferAccess_ReadOnly,
+											&Y_PixelAddress, &Y_RowBytes,
+											&U_PixelAddress, &U_RowBytes,
+											&V_PixelAddress, &V_RowBytes);
+											
+		const int w = width;
+		const int h = height;
+		unsigned char *y = (unsigned char *)yuvframe[frame_state];
+		unsigned char *u = y + (w * h);
+		unsigned char *v = u + (((w + 1) / 2) * ((h + 1) / 2));
+		
+		for(int i = 0; i < h; i++)
+		{
+			const unsigned char *prY = (unsigned char *)Y_PixelAddress + (Y_RowBytes * i);
+			
+			memcpy(y, prY, w * sizeof(unsigned char));
+			
+			y += w;
+		}
+		
+		for(int i = 0; i < ((h + 1) / 2); i++)
+		{
+			const unsigned char *prU = (unsigned char *)U_PixelAddress + (U_RowBytes * i);
+			const unsigned char *prV = (unsigned char *)V_PixelAddress + (V_RowBytes * i);
+			
+			memcpy(u, prU, ((w + 1) / 2) * sizeof(unsigned char));
+			memcpy(v, prV, ((w + 1) / 2) * sizeof(unsigned char));
+			
+			u += ((w + 1) / 2);
+			v += ((w + 1) / 2);
+		}
+	}
+	else if(pixFormat == PrPixelFormat_BGRA_4444_8u)
+	{
+		char *frameBufferP = NULL;
+		csSDK_int32 rowbytes = 0;
+		
+		pixSuite->GetPixels(renderResult.outFrame, PrPPixBufferAccess_ReadOnly, &frameBufferP);
+		pixSuite->GetRowBytes(renderResult.outFrame, &rowbytes);
+		
+		
+		unsigned char *yP = (unsigned char *)yuvframe[frame_state];
+		unsigned char *uP = yP + (width * height);
+		unsigned char *vP = uP + (((width + 1) / 2) * ((height + 1) / 2));
+		
+		size_t y_stride = width * sizeof(unsigned char);
+		size_t uv_stride = ((width + 1) / 2) * sizeof(unsigned char);
+		
+		for(int y = 0; y < height; y++)
+		{
+			// using the conversion found here: http://www.fourcc.org/fccyvrgb.php
+			
+			unsigned char *imgY = yP + (y_stride * y);
+			unsigned char *imgU = uP + (uv_stride * (y / 2));
+			unsigned char *imgV = vP + (uv_stride * (y / 2));
+			
+			// the rows in this kind of Premiere buffer are flipped, FYI (or is it flopped?)
+			unsigned char *prBGRA = (unsigned char *)frameBufferP + (rowbytes * (height - 1 - y));
+			
+			unsigned char *prB = prBGRA + 0;
+			unsigned char *prG = prBGRA + 1;
+			unsigned char *prR = prBGRA + 2;
+			unsigned char *prA = prBGRA + 3;
+			
+			for(int x=0; x < width; x++)
+			{
+				// like the clever integer (fixed point) math?
+				*imgY++ = ((257 * (int)*prR) + (504 * (int)*prG) + ( 98 * (int)*prB) + 16500) / 1000;
+				
+				if( (y % 2 == 0) && (x % 2 == 0) )
+				{
+					*imgV++ = ((439 * (int)*prR) - (368 * (int)*prG) - ( 71 * (int)*prB) + 128500) / 1000;
+					*imgU++ = (-(148 * (int)*prR) - (291 * (int)*prG) + (439 * (int)*prB) + 128500) / 1000;
+				}
+				
+				prR += 4;
+				prG += 4;
+				prB += 4;
+				prA += 4;
+			}
+		}
+	}
+	
+	//assert(y4m_aux_buf_read_sz == 0);
+
+    /*Now convert the just read frame.*/
+    //(*y4m_convert)(yuvframe[frame_state],yuvframe[2]);
+    frames++;
+    if(frames>=beginframe)
+    frame_state++;
+  }
+  /* check to see if there are dupes to flush */
+  if(th_encode_packetout(td,frame_state<1,op)>0)return 1;
+  assert(frame_state >= 1);
+  /* Theora is a one-frame-in,one-frame-out system; submit a frame
+     for compression and pull out the packet */
+  /* in two-pass mode's second pass, we need to submit first-pass data */
+  if(passno==2){
+    for(;;){
+      static unsigned char buffer[80];
+      static int buf_pos;
+      int bytes;
+      /*Ask the encoder how many bytes it would like.*/
+      bytes=th_encode_ctl(td,TH_ENCCTL_2PASS_IN,NULL,0);
+	  assert(bytes >= 0);
+      /*If it's got enough, stop.*/
+      if(bytes==0)break;
+      /*Read in some more bytes, if necessary.*/
+      if(bytes>80-buf_pos)bytes=80-buf_pos;
+      if(bytes>0&&fread_buf(buffer+buf_pos,1,bytes,vbr_buffer,vbr_buffer_pos)<bytes){
+        assert(false);
+      }
+      /*And pass them off.*/
+      ret=th_encode_ctl(td,TH_ENCCTL_2PASS_IN,buffer,bytes);
+      if(ret<0){
+        assert(false);
+      }
+      /*If the encoder consumed the whole buffer, reset it.*/
+      if(ret>=bytes)buf_pos=0;
+      /*Otherwise remember how much it used.*/
+      else buf_pos+=ret;
+    }
+  }
+  /*We submit the buffer using the size of the picture region.
+    libtheora will pad the picture region out to the full frame size for us,
+     whether we pass in a full frame or not.*/
+  ycbcr[0].width=pic_w;
+  ycbcr[0].height=pic_h;
+  ycbcr[0].stride=pic_w;
+  ycbcr[0].data=yuvframe[0];
+  ycbcr[1].width=c_w;
+  ycbcr[1].height=c_h;
+  ycbcr[1].stride=c_w;
+  ycbcr[1].data=yuvframe[0]+pic_sz;
+  ycbcr[2].width=c_w;
+  ycbcr[2].height=c_h;
+  ycbcr[2].stride=c_w;
+  ycbcr[2].data=yuvframe[0]+pic_sz+c_sz;
+  th_encode_ycbcr_in(td,ycbcr);
+  {
+    unsigned char *temp=yuvframe[0];
+    yuvframe[0]=yuvframe[1];
+    yuvframe[1]=temp;
+    frame_state--;
+  }
+  /* in two-pass mode's first pass we need to extract and save the pass data */
+  if(passno==1){
+    unsigned char *buffer;
+    int bytes = th_encode_ctl(td, TH_ENCCTL_2PASS_OUT, &buffer, sizeof(buffer));
+    if(bytes<0){
+      assert(false);
+    }
+    if(fwrite_buf(buffer,1,bytes,vbr_buffer, vbr_buffer_size, memorySuite)<bytes){
+      assert(false);
+    }
+    //fflush(twopass_file);
+  }
+  /* if there was only one frame, it's the last in the stream */
+  ret = th_encode_packetout(td,frame_state<1,op);
+  if(passno==1 && frame_state<1){
+    /* need to read the final (summary) packet */
+    unsigned char *buffer;
+    int bytes = th_encode_ctl(td, TH_ENCCTL_2PASS_OUT, &buffer, sizeof(buffer));
+    if(bytes<0){
+      assert(false);
+    }
+    if(fseek_buf(vbr_buffer_pos,0,SEEK_SET)<0){
+      assert(false);
+    }
+    if(fwrite_buf(buffer,1,bytes,vbr_buffer, vbr_buffer_size, memorySuite)<bytes){
+      assert(false);
+    }
+    //fflush(twopass_file);
+  }
+  return ret;
+}
+
+static
+int fetch_and_process_video(PrSDKSequenceRenderSuite	*renderSuite, csSDK_uint32 videoRenderID, SequenceRender_ParamsRec &renderParms, PrTime ticksPerSecond,
+ PrSDKPPixSuite *pixSuite, PrSDKPPix2Suite *pix2Suite, ogg_page *videopage,
+ ogg_stream_state *to,th_enc_ctx *td,PrMemoryPtr &vbr_buffer, size_t &vbr_buffer_pos, size_t &vbr_buffer_size, PrSDKMemoryManagerSuite *memorySuite,int passno,
+ int videoflag, int &video_fps_n, int &video_fps_d, long &begin_sec, long &begin_usec, long &end_sec, long &end_usec,
+ size_t &y4m_dst_buf_sz, size_t &y4m_aux_buf_sz, int &pic_w, int &pic_h, int &dst_c_dec_h, int &dst_c_dec_v,
+ int &frame_state, ogg_int64_t &frames, unsigned char ** &yuvframe, th_ycbcr_buffer &ycbcr)
+ {
+  ogg_packet op;
+  int ret;
+  // is there a video page flushed?  If not, work until there is. 
+  while(!videoflag){
+    if(ogg_stream_pageout(to,videopage)>0) return 1;
+    if(ogg_stream_eos(to)) return 0;
+	
+	
+    ret=fetch_and_process_video_packet(renderSuite, videoRenderID, renderParms, ticksPerSecond,
+		 pixSuite, pix2Suite, vbr_buffer, vbr_buffer_pos, vbr_buffer_size, memorySuite,passno,
+		 td,&op, video_fps_n, video_fps_d, begin_sec, begin_usec, end_sec, end_usec,
+		 y4m_dst_buf_sz, y4m_aux_buf_sz, pic_w, pic_h, dst_c_dec_h, dst_c_dec_v,
+		 frame_state, frames, yuvframe, ycbcr);
+	
+	
+	
+    if(ret<=0)return 0;
+    ogg_stream_packetin(to,&op);
+  }
+  return videoflag;
+}
+
+static
+int ilog(unsigned _v){
+  int ret;
+  for(ret=0;_v;ret++)_v>>=1;
+  return ret;
+}
+
+static
+int parse_time(long *_sec,long *_usec,const char *_optarg){
+  double      secf;
+  long        secl;
+  const char *pos;
+  char       *end;
+  int         err;
+  err=0;
+  secl=0;
+  pos=strchr(_optarg,':');
+  if(pos!=NULL){
+    char *pos2;
+    secl=strtol(_optarg,&end,10)*60;
+    err|=pos!=end;
+    pos2=strchr(++pos,':');
+    if(pos2!=NULL){
+      secl=(secl+strtol(pos,&end,10))*60;
+      err|=pos2!=end;
+      pos=pos2+1;
+    }
+  }
+  else pos=_optarg;
+  secf=strtod(pos,&end);
+  if(err||*end!='\0')return -1;
+  *_sec=secl+(long)floor(secf);
+  *_usec=(long)((secf-floor(secf))*1E6+0.5);
+  return 0;
+}
+
+static size_t fwrite_pr(const void *in_buf, size_t elemsz, size_t elem_num, csSDK_uint32 fileObject, PrSDKExportFileSuite *fileSuite)
+{
+	prSuiteError err = fileSuite->Write(fileObject, (void *)in_buf, (elemsz * elem_num));
+	
+	return (err == malNoError ? elem_num : 0);
+}
+
+
+static
+prMALError compress_main(PrSDKSequenceRenderSuite	*renderSuite, csSDK_uint32 videoRenderID, SequenceRender_ParamsRec &renderParms, PrTime ticksPerSecond,
+ PrSDKPPixSuite *pixSuite, PrSDKPPix2Suite *pix2Suite, PrMemoryPtr &vbr_buffer, size_t &vbr_buffer_pos, size_t &vbr_buffer_size, PrSDKMemoryManagerSuite *memorySuite,
+ const PrSDKSequenceAudioSuite *audioSuite, const csSDK_uint32 audioRenderID, csSDK_int32 maxBlip,
+ PrSDKExportProgressSuite *exportProgressSuite, csSDK_uint32 inExportID,
+ csSDK_uint32 fileObject, PrSDKExportFileSuite *fileSuite, bool do_video, bool do_audio,
+ int audio_ch, int audio_hz, int pic_w, int pic_h, int video_fps_n, int video_fps_d, int video_par_n, int video_par_d,
+ float audio_q, int audio_r, int video_q, int video_r, int twopass, long begin_sec, long begin_usec, long end_sec, long end_usec){
+
+	prMALError result = malNoError;
+  // former globals
+//int audio_ch=0;
+//int audio_hz=0;
+
+//float audio_q=.1f;
+//int audio_r=-1;
+int vp3_compatible=0;
+
+int quiet=1;
+
+int frame_w=0;
+int frame_h=0;
+//int pic_w=0;
+//int pic_h=0;
+int pic_x=0;
+int pic_y=0;
+//int video_fps_n=-1;
+//int video_fps_d=-1;
+//int video_par_n=-1;
+//int video_par_d=-1;
+char interlace;
+int src_c_dec_h=2;
+int src_c_dec_v=2;
+int dst_c_dec_h=2;
+int dst_c_dec_v=2;
+char chroma_type[16];
+
+/*The size of each converted frame buffer.*/
+size_t y4m_dst_buf_sz = pic_w*pic_h+2*((pic_w+dst_c_dec_h-1)/dst_c_dec_h)*((pic_h+dst_c_dec_v-1)/dst_c_dec_v);
+/*The amount to read directly into the converted frame buffer.*/
+//size_t y4m_dst_buf_read_sz;
+/*The size of the auxilliary buffer.*/
+size_t y4m_aux_buf_sz = 0;
+/*The amount to read into the auxilliary buffer.*/
+//size_t y4m_aux_buf_read_sz;
+
+/*The function used to perform chroma conversion.*/
+//typedef void (*y4m_convert_func)(unsigned char *_dst,unsigned char *_aux);
+
+//y4m_convert_func y4m_convert=NULL;
+
+//int video_r=-1;
+//int video_q=-1;
+ogg_uint32_t keyframe_frequency=0;
+int buf_delay=-1;
+
+//long begin_sec=-1;
+//long begin_usec=0;
+//long end_sec=-1;
+//long end_usec=0;
+
+
+int                 frame_state=-1;
+ogg_int64_t         frames=0;
+unsigned char      **yuvframe;
+th_ycbcr_buffer     ycbcr;
+
+ 
+  int c,long_option_index,ret;
+
+  ogg_stream_state to; /* take physical pages, weld into a logical
+                           stream of packets */
+  ogg_stream_state vo; /* take physical pages, weld into a logical
+                           stream of packets */
+  ogg_page         og; /* one Ogg bitstream page.  Vorbis packets are inside */
+  ogg_packet       op; /* one raw packet of data for decode */
+
+  th_enc_ctx      *td;
+  th_info          ti;
+  th_comment       tc;
+
+  vorbis_info      vi; /* struct that stores all the static vorbis bitstream
+                          settings */
+  vorbis_comment   vc; /* struct that stores all the user comments */
+
+  vorbis_dsp_state vd; /* central working state for the packet->PCM decoder */
+  vorbis_block     vb; /* local working space for packet->PCM decode */
+
+  int speed=-1;
+  int audioflag=0;
+  int videoflag=0;
+  int akbps=0;
+  int vkbps=0;
+  int soft_target=0;
+
+  ogg_int64_t audio_bytesout=0;
+  ogg_int64_t video_bytesout=0;
+  double timebase;
+
+  fpos_t video_rewind_pos;
+  //int twopass=0;
+  int passno;
+
+  clock_t clock_start=clock();
+  clock_t clock_end;
+  double elapsed;
+
+
+  if(soft_target){
+    if(video_r<=0){
+      assert(false);
+    }
+    if(video_q==-1)
+      video_q=0;
+  }else{
+    if(video_q==-1){
+      if(video_r>0)
+        video_q=0;
+      else
+        video_q=48;
+    }
+  }
+
+  if(keyframe_frequency<=0){
+    /*Use a default keyframe frequency of 64 for 1-pass (streaming) mode, and
+       256 for two-pass mode.*/
+    keyframe_frequency=twopass?256:64;
+  }
+
+
+
+  /* Set up Ogg output stream */
+  srand(time(NULL));
+  ogg_stream_init(&to,rand()); /* oops, add one to the above */
+
+  /* initialize Vorbis assuming we have audio to compress. */
+  if(do_audio && twopass!=1){
+    ogg_stream_init(&vo,rand());
+    vorbis_info_init(&vi);
+    if(audio_q>-99)
+      ret = vorbis_encode_init_vbr(&vi,audio_ch,audio_hz,audio_q);
+    else
+      ret = vorbis_encode_init(&vi,audio_ch,audio_hz,-1,
+                               (int)(64870*(ogg_int64_t)audio_r>>16),-1);
+    if(ret){
+      assert(false);
+    }
+
+    vorbis_comment_init(&vc);
+    vorbis_analysis_init(&vd,&vi);
+    vorbis_block_init(&vd,&vb);
+  }
+
+  for(passno=(twopass==3?1:twopass);passno<=(twopass==3?2:twopass);passno++){
+    /* Set up Theora encoder */
+    if(!do_video){
+      assert(false);
+    }
+    /* Theora has a divisible-by-sixteen restriction for the encoded frame size */
+    /* scale the picture size up to the nearest /16 and calculate offsets */
+    frame_w=pic_w+15&~0xF;
+    frame_h=pic_h+15&~0xF;
+    /*Force the offsets to be even so that chroma samples line up like we
+       expect.*/
+    pic_x=frame_w-pic_w>>1&~1;
+    pic_y=frame_h-pic_h>>1&~1;
+    th_info_init(&ti);
+    ti.frame_width=frame_w;
+    ti.frame_height=frame_h;
+    ti.pic_width=pic_w;
+    ti.pic_height=pic_h;
+    ti.pic_x=pic_x;
+    ti.pic_y=pic_y;
+    ti.fps_numerator=video_fps_n;
+    ti.fps_denominator=video_fps_d;
+    ti.aspect_numerator=video_par_n;
+    ti.aspect_denominator=video_par_d;
+    ti.colorspace=TH_CS_UNSPECIFIED;
+    /*Account for the Ogg page overhead.
+      This is 1 byte per 255 for lacing values, plus 26 bytes per 4096 bytes for
+       the page header, plus approximately 1/2 byte per packet (not accounted for
+       here).*/
+    ti.target_bitrate=(int)(64870*(ogg_int64_t)video_r>>16);
+    ti.quality=video_q;
+    ti.keyframe_granule_shift=ilog(keyframe_frequency-1);
+    if(dst_c_dec_h==2){
+      if(dst_c_dec_v==2)ti.pixel_fmt=TH_PF_420;
+      else ti.pixel_fmt=TH_PF_422;
+    }
+    else ti.pixel_fmt=TH_PF_444;
+    td=th_encode_alloc(&ti);
+    th_info_clear(&ti);
+    if(td==NULL){
+      assert(false);
+    }
+    /* setting just the granule shift only allows power-of-two keyframe
+       spacing.  Set the actual requested spacing. */
+    ret=th_encode_ctl(td,TH_ENCCTL_SET_KEYFRAME_FREQUENCY_FORCE,
+     &keyframe_frequency,sizeof(keyframe_frequency-1));
+    if(ret<0){
+      //fprintf(stderr,"Could not set keyframe interval to %d.\n",(int)keyframe_frequency);
+    }
+    if(vp3_compatible){
+      ret=th_encode_ctl(td,TH_ENCCTL_SET_VP3_COMPATIBLE,&vp3_compatible,
+       sizeof(vp3_compatible));
+      if(ret<0||!vp3_compatible){
+        //fprintf(stderr,"Could not enable strict VP3 compatibility.\n");
+        if(ret>=0){
+          //fprintf(stderr,"Ensure your source format is supported by VP3.\n");
+          //fprintf(stderr,
+          // "(4:2:0 pixel format, width and height multiples of 16).\n");
+        }
+      }
+    }
+    if(soft_target){
+      /* reverse the rate control flags to favor a 'long time' strategy */
+      int arg = TH_RATECTL_CAP_UNDERFLOW;
+      ret=th_encode_ctl(td,TH_ENCCTL_SET_RATE_FLAGS,&arg,sizeof(arg));
+      //if(ret<0)
+        //fprintf(stderr,"Could not set encoder flags for --soft-target\n");
+      /* Default buffer control is overridden on two-pass */
+      if(!twopass&&buf_delay<0){
+        if((keyframe_frequency*7>>1) > 5*video_fps_n/video_fps_d)
+          arg=keyframe_frequency*7>>1;
+        else
+          arg=5*video_fps_n/video_fps_d;
+        ret=th_encode_ctl(td,TH_ENCCTL_SET_RATE_BUFFER,&arg,sizeof(arg));
+        //if(ret<0)
+        //  fprintf(stderr,"Could not set rate control buffer for --soft-target\n");
+      }
+    }
+    /* set up two-pass if needed */
+    if(passno==1){
+      unsigned char *buffer;
+      int bytes;
+      bytes=th_encode_ctl(td,TH_ENCCTL_2PASS_OUT,&buffer,sizeof(buffer));
+      if(bytes<0){
+        assert(false);
+      }
+      /*Perform a seek test to ensure we can overwrite this placeholder data at
+         the end; this is better than letting the user sit through a whole
+         encode only to find out their pass 1 file is useless at the end.*/
+      if(fseek_buf(vbr_buffer_pos,0,SEEK_SET)<0){
+        assert(false);
+      }
+      if(fwrite_buf(buffer,1,bytes,vbr_buffer, vbr_buffer_size, memorySuite)<bytes){
+        assert(false);
+      }
+      //fflush(twopass_file);
+    }
+    if(passno==2){
+      /*Enable the second pass here.
+        We make this call just to set the encoder into 2-pass mode, because
+         by default enabling two-pass sets the buffer delay to the whole file
+         (because there's no way to explicitly request that behavior).
+        If we waited until we were actually encoding, it would overwite our
+         settings.*/
+      if(th_encode_ctl(td,TH_ENCCTL_2PASS_IN,NULL,0)<0){
+        assert(false);
+      }
+      if(twopass==3){
+        /* 'automatic' second pass */
+        //if(fsetpos(video,&video_rewind_pos)<0){
+        //  fprintf(stderr,"Could not rewind video input file for second pass!\n");
+        //  exit(1);
+        //}
+         if(fseek_buf(vbr_buffer_pos,0,SEEK_SET)<0){
+          assert(false);
+        }
+        frame_state=0;
+        frames=0;
+      }
+    }
+    /*Now we can set the buffer delay if the user requested a non-default one
+       (this has to be done after two-pass is enabled).*/
+    if(passno!=1&&buf_delay>=0){
+      ret=th_encode_ctl(td,TH_ENCCTL_SET_RATE_BUFFER,
+       &buf_delay,sizeof(buf_delay));
+      if(ret<0){
+        //fprintf(stderr,"Warning: could not set desired buffer delay.\n");
+      }
+    }
+    /*Speed should also be set after the current encoder mode is established,
+       since the available speed levels may change depending.*/
+    if(speed>=0){
+      int speed_max;
+      int ret;
+      ret=th_encode_ctl(td,TH_ENCCTL_GET_SPLEVEL_MAX,
+       &speed_max,sizeof(speed_max));
+      if(ret<0){
+        //fprintf(stderr,"Warning: could not determine maximum speed level.\n");
+        speed_max=0;
+      }
+      ret=th_encode_ctl(td,TH_ENCCTL_SET_SPLEVEL,&speed,sizeof(speed));
+      if(ret<0){
+        //fprintf(stderr,"Warning: could not set speed level to %i of %i\n",
+        // speed,speed_max);
+        if(speed>speed_max){
+          //fprintf(stderr,"Setting it to %i instead\n",speed_max);
+        }
+        ret=th_encode_ctl(td,TH_ENCCTL_SET_SPLEVEL,
+         &speed_max,sizeof(speed_max));
+        if(ret<0){
+          //fprintf(stderr,"Warning: could not set speed level to %i of %i\n",
+          // speed_max,speed_max);
+        }
+      }
+    }
+    /* write the bitstream header packets with proper page interleave */
+    th_comment_init(&tc);
+    /* first packet will get its own page automatically */
+    if(th_encode_flushheader(td,&tc,&op)<=0){
+      assert(false);
+    }
+    if(passno!=1){
+      ogg_stream_packetin(&to,&op);
+      if(ogg_stream_pageout(&to,&og)!=1){
+        assert(false);
+      }
+      fwrite_pr(og.header,1,og.header_len,fileObject, fileSuite);
+      fwrite_pr(og.body,1,og.body_len,fileObject, fileSuite);
+    }
+    /* create the remaining theora headers */
+    for(;;){
+      ret=th_encode_flushheader(td,&tc,&op);
+      if(ret<0){
+        assert(false);
+      }
+      else if(!ret)break;
+      if(passno!=1)ogg_stream_packetin(&to,&op);
+    }
+    if(do_audio && passno!=1){
+      ogg_packet header;
+      ogg_packet header_comm;
+      ogg_packet header_code;
+      vorbis_analysis_headerout(&vd,&vc,&header,&header_comm,&header_code);
+      ogg_stream_packetin(&vo,&header); /* automatically placed in its own
+                                           page */
+      if(ogg_stream_pageout(&vo,&og)!=1){
+        assert(false);
+      }
+      fwrite_pr(og.header,1,og.header_len,fileObject, fileSuite);
+      fwrite_pr(og.body,1,og.body_len,fileObject, fileSuite);
+      /* remaining vorbis header packets */
+      ogg_stream_packetin(&vo,&header_comm);
+      ogg_stream_packetin(&vo,&header_code);
+    }
+    /* Flush the rest of our headers. This ensures
+       the actual data in each stream will start
+       on a new page, as per spec. */
+    if(passno!=1){
+      for(;;){
+        int result = ogg_stream_flush(&to,&og);
+        if(result<0){
+          /* can't get here */
+          assert(false);
+        }
+        if(result==0)break;
+        fwrite_pr(og.header,1,og.header_len,fileObject, fileSuite);
+        fwrite_pr(og.body,1,og.body_len,fileObject, fileSuite);
+      }
+    }
+    if(do_audio && passno!=1){
+      for(;;){
+        int result=ogg_stream_flush(&vo,&og);
+        if(result<0){
+          /* can't get here */
+          assert(false);
+        }
+        if(result==0)break;
+        fwrite_pr(og.header,1,og.header_len,fileObject, fileSuite);
+        fwrite_pr(og.body,1,og.body_len,fileObject, fileSuite);
+      }
+    }
+    /* setup complete.  Raw processing loop */
+    for(;;){
+      int audio_or_video=-1;
+      if(passno==1){
+        ogg_packet op;
+		
+		
+		
+        int ret=fetch_and_process_video_packet(renderSuite, videoRenderID, renderParms, ticksPerSecond,
+ pixSuite, pix2Suite, vbr_buffer, vbr_buffer_pos, vbr_buffer_size, memorySuite,passno,
+ td,&op, video_fps_n, video_fps_d, begin_sec, begin_usec, end_sec, end_usec,
+ y4m_dst_buf_sz, y4m_aux_buf_sz, pic_w, pic_h, dst_c_dec_h, dst_c_dec_v,
+ frame_state, frames, yuvframe, ycbcr);
+		
+		
+		
+		
+        if(ret<0)break;
+        if(op.e_o_s)break; /* end of stream */
+        timebase=th_granule_time(td,op.granulepos);
+        audio_or_video=1;
+      }else{
+        double audiotime;
+        double videotime;
+        ogg_page audiopage;
+        ogg_page videopage;
+		
+		
+		
+        /* is there an audio page flushed?  If not, fetch one if possible */
+        audioflag=fetch_and_process_audio(audioSuite, audioRenderID, maxBlip,
+ &audiopage, &vo, &vd, &vb,
+ audioflag, audio_hz, begin_sec, begin_usec, end_sec, end_usec);
+		
+		
+		
+		
+		
+        /* is there a video page flushed?  If not, fetch one if possible */
+        videoflag=fetch_and_process_video(renderSuite, videoRenderID, renderParms, ticksPerSecond,
+					pixSuite, pix2Suite, &videopage,
+					&to,td,vbr_buffer, vbr_buffer_pos, vbr_buffer_size, memorySuite,passno,
+					videoflag, video_fps_n, video_fps_d, begin_sec, begin_usec, end_sec, end_usec,
+					y4m_dst_buf_sz, y4m_aux_buf_sz, pic_w, pic_h, dst_c_dec_h, dst_c_dec_v,
+					frame_state, frames, yuvframe, ycbcr);
+	
+		
+
+		float progress = (double)frames / (double)((end_sec - begin_sec) * video_fps_n / video_fps_d) ;
+		
+		if(twopass > 1)
+			progress = (progress / 2.f) + (0.5f * passno);
+
+		result = exportProgressSuite->UpdateProgressPercent(inExportID, progress);
+		
+		if(result == suiteError_ExporterSuspended)
+		{
+			result = exportProgressSuite->WaitForResume(inExportID);
+		}
+
+		if(result != malNoError)
+			break;
+			
+		
+        /* no pages of either?  Must be end of stream. */
+        if(!audioflag && !videoflag)break;
+        /* which is earlier; the end of the audio page or the end of the
+           video page? Flush the earlier to stream */
+        audiotime=
+        audioflag?vorbis_granule_time(&vd,ogg_page_granulepos(&audiopage)):-1;
+        videotime=
+        videoflag?th_granule_time(td,ogg_page_granulepos(&videopage)):-1;
+        if(!audioflag){
+          audio_or_video=1;
+        } else if(!videoflag) {
+          audio_or_video=0;
+        } else {
+          if(audiotime<videotime)
+            audio_or_video=0;
+          else
+            audio_or_video=1;
+        }
+        if(audio_or_video==1){
+          /* flush a video page */
+          video_bytesout+=fwrite_pr(videopage.header,1,videopage.header_len,fileObject, fileSuite);
+          video_bytesout+=fwrite_pr(videopage.body,1,videopage.body_len,fileObject, fileSuite);
+          videoflag=0;
+          timebase=videotime;
+        }else{
+          /* flush an audio page */
+          audio_bytesout+=fwrite_pr(audiopage.header,1,audiopage.header_len,fileObject, fileSuite);
+          audio_bytesout+=fwrite_pr(audiopage.body,1,audiopage.body_len,fileObject, fileSuite);
+          audioflag=0;
+          timebase=audiotime;
+        }
+      }
+      if(!quiet&&timebase>0){
+        int hundredths=(int)(timebase*100-(long)timebase*100);
+        int seconds=(long)timebase%60;
+        int minutes=((long)timebase/60)%60;
+        int hours=(long)timebase/3600;
+        if(audio_or_video)vkbps=(int)rint(video_bytesout*8./timebase*.001);
+        else akbps=(int)rint(audio_bytesout*8./timebase*.001);
+        //fprintf(stderr,
+        //        "\r      %d:%02d:%02d.%02d audio: %dkbps video: %dkbps                 ",
+        //        hours,minutes,seconds,hundredths,akbps,vkbps);
+      }
+    }
+    if(do_video)th_encode_free(td);
+  }
+
+  /* clear out state */
+  if(do_audio && twopass!=1){
+    ogg_stream_clear(&vo);
+    vorbis_block_clear(&vb);
+    vorbis_dsp_clear(&vd);
+    vorbis_comment_clear(&vc);
+    vorbis_info_clear(&vi);
+    //if(audio!=stdin)fclose(audio);
+  }
+  if(do_video){
+    ogg_stream_clear(&to);
+    th_comment_clear(&tc);
+    //if(video!=stdin)fclose(video);
+  }
+
+  //if(outfile && outfile!=stdout)fclose(outfile);
+  //if(twopass_file)fclose(twopass_file);
+
+  clock_end=clock();
+  elapsed=(clock_end-clock_start)/(double)CLOCKS_PER_SEC;
+
+  return result;
+
+}
 
 
 static prMALError
@@ -407,9 +1320,6 @@ exSDKExport(
 		paramSuite->GetParamValue(exID, gIdx, ADBEVideoFPS, &frameRateP);
 	}
 	
-	exParamValues alphaP;
-	//paramSuite->GetParamValue(exID, gIdx, ADBEVideoAlpha, &alphaP);
-	alphaP.value.intValue = 0;
 	
 	exParamValues sampleRateP, channelTypeP;
 	paramSuite->GetParamValue(exID, gIdx, ADBEAudioRatePerSecond, &sampleRateP);
@@ -420,15 +1330,14 @@ exSDKExport(
 								audioFormat == kPrAudioChannelType_Mono ? 1 :
 								2);
 	
-	exParamValues codecP, methodP, videoQualityP, bitrateP, vidEncodingP, customArgsP;
-	paramSuite->GetParamValue(exID, gIdx, WebMVideoCodec, &codecP);
-	paramSuite->GetParamValue(exID, gIdx, WebMVideoMethod, &methodP);
-	paramSuite->GetParamValue(exID, gIdx, WebMVideoQuality, &videoQualityP);
-	paramSuite->GetParamValue(exID, gIdx, WebMVideoBitrate, &bitrateP);
-	paramSuite->GetParamValue(exID, gIdx, WebMVideoEncoding, &vidEncodingP);
-	paramSuite->GetParamValue(exID, gIdx, WebMCustomArgs, &customArgsP);
+	exParamValues methodP, videoQualityP, bitrateP, vidEncodingP, customArgsP;
+	paramSuite->GetParamValue(exID, gIdx, TheoraVideoMethod, &methodP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraVideoQuality, &videoQualityP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraVideoBitrate, &bitrateP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraVideoEncoding, &vidEncodingP);
+	//paramSuite->GetParamValue(exID, gIdx, TheoraCustomArgs, &customArgsP);
 	
-	WebM_Video_Method method = (WebM_Video_Method)methodP.value.intValue;
+	Theora_Video_Method method = (Theora_Video_Method)methodP.value.intValue;
 	
 	char customArgs[256];
 	ncpyUTF16(customArgs, customArgsP.paramString, 255);
@@ -436,15 +1345,14 @@ exSDKExport(
 	
 
 	exParamValues audioMethodP, audioQualityP, audioBitrateP;
-	paramSuite->GetParamValue(exID, gIdx, WebMAudioMethod, &audioMethodP);
-	paramSuite->GetParamValue(exID, gIdx, WebMAudioQuality, &audioQualityP);
-	paramSuite->GetParamValue(exID, gIdx, WebMAudioBitrate, &audioBitrateP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraAudioMethod, &audioMethodP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraAudioQuality, &audioQualityP);
+	paramSuite->GetParamValue(exID, gIdx, TheoraAudioBitrate, &audioBitrateP);
 	
 	
 	SequenceRender_ParamsRec renderParms;
 	PrPixelFormat pixelFormats[] = { PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709,
-									PrPixelFormat_BGRA_4444_16u, // must support BGRA, even if I don't want to
-									PrPixelFormat_BGRA_4444_8u };
+									PrPixelFormat_BGRA_4444_8u };// must support BGRA, even if I don't want to
 	
 	renderParms.inRequestedPixelFormatArray = pixelFormats;
 	renderParms.inRequestedPixelFormatArrayCount = 3;
@@ -456,7 +1364,7 @@ exSDKExport(
 	renderParms.inFieldType = fieldTypeP.value.intValue;
 	renderParms.inDeinterlace = kPrFalse;
 	renderParms.inDeinterlaceQuality = kPrRenderQuality_High;
-	renderParms.inCompositeOnBlack = (alphaP.value.intValue ? kPrFalse: kPrTrue);
+	renderParms.inCompositeOnBlack = kPrTrue;
 	
 	
 	csSDK_uint32 videoRenderID = 0;
@@ -479,41 +1387,66 @@ exSDKExport(
 	}
 
 	
+	csSDK_int32 maxBlip = 0;
+	mySettings->sequenceAudioSuite->GetMaxBlip(audioRenderID, frameRateP.value.timeValue, &maxBlip);
+
+	exRatioValue fps;
+	get_framerate(ticksPerSecond, frameRateP.value.timeValue, &fps);
+
+
 	PrMemoryPtr vbr_buffer = NULL;
+	size_t vbr_buffer_pos = 0;
 	size_t vbr_buffer_size = 0;
 
-
-	try{
 	
-	const int passes = ( (exportInfoP->exportVideo && method == WEBM_METHOD_VBR) ? 2 : 1);
+	long begin_sec = (exportInfoP->startTime / ticksPerSecond);
+	long begin_usec = ((exportInfoP->startTime - (begin_sec * ticksPerSecond)) * 1E6) / ticksPerSecond;
+	long end_sec = (exportInfoP->endTime / ticksPerSecond);
+	long end_usec = ((exportInfoP->endTime - (end_sec * ticksPerSecond)) * 1E6) / ticksPerSecond;
 	
-	for(int pass = 0; pass < passes && result == malNoError; pass++)
+	
+	
+	int twopass = 0;
+	
+	float audio_q=.1f;
+	int audio_r=-1;
+	int video_r=-1;
+	int video_q=-1;
+	
+	if(audioMethodP.value.intValue == OGG_QUALITY)
+		audio_q = audioQualityP.value.floatValue;
+	else
+		audio_r = audioBitrateP.value.intValue;
+		
+	
+	if(methodP.value.intValue == THEORA_METHOD_QUALITY)
+		video_q = videoQualityP.value.intValue;
+	else
 	{
-		const bool vbr_pass = (passes > 1 && pass == 0);
+		video_r = bitrateP.value.intValue;
 		
-
-		if(passes > 1)
-		{
-			prUTF16Char utf_str[256];
-		
-			if(vbr_pass)
-				utf16ncpy(utf_str, "Analyzing video", 255);
-			else
-				utf16ncpy(utf_str, "Encoding WebM movie", 255);
-			
-			// This doesn't seem to be doing anything
-			mySettings->exportProgressSuite->SetProgressString(exID, utf_str);
-		}
-		
-		
-	
-		exRatioValue fps;
-		get_framerate(ticksPerSecond, frameRateP.value.timeValue, &fps);
-		
-		
+		if(methodP.value.intValue == THEORA_METHOD_VBR)
+			twopass = 3;
 	}
 	
-	}catch(...) { result = exportReturn_InternalError; }
+	
+	mySettings->exportFileSuite->Open(exportInfoP->fileObject);
+	
+	
+	result = compress_main(renderSuite, videoRenderID, renderParms, ticksPerSecond,
+							pixSuite, pix2Suite, vbr_buffer, vbr_buffer_pos, vbr_buffer_size, memorySuite,
+							audioSuite, audioRenderID, maxBlip,
+							mySettings->exportProgressSuite, exID,
+							exportInfoP->fileObject, mySettings->exportFileSuite,
+							exportInfoP->exportVideo, exportInfoP->exportAudio,
+							audioChannels, sampleRateP.value.floatValue,
+							widthP.value.intValue, heightP.value.intValue, fps.numerator, fps.denominator,
+							pixelAspectRatioP.value.ratioValue.numerator, pixelAspectRatioP.value.ratioValue.denominator,
+							audio_q, audio_r, video_q, video_r, twopass,
+							begin_sec, begin_usec, end_sec, end_usec);
+	
+	
+	mySettings->exportFileSuite->Close(exportInfoP->fileObject);
 	
 	
 	if(vbr_buffer != NULL)
