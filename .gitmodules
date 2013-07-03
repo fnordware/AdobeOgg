@@ -7,3 +7,6 @@
 [submodule "ext/flac"]
 	path = ext/flac
 	url = git://git.xiph.org/flac.git
+[submodule "ext/libtheora"]
+	path = ext/libtheora
+	url = git://git.xiph.org/mirrors/theora.git
