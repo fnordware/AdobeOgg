@@ -13,3 +13,6 @@
 [submodule "ext/opusfile"]
 	path = ext/opusfile
 	url = git://git.xiph.org/opusfile.git
+[submodule "ext/libtheora"]
+	path = ext/libtheora
+	url = git://git.xiph.org/mirrors/theora.git
