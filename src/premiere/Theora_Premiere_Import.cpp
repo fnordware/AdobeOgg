@@ -521,62 +521,65 @@ SDKGetInfo8(
 		if(decoder)
 		{
 			int frames = 0;
+            PrTime samples = 0;
 			
-			while(!THEORAPLAY_isInitialized(decoder))
-				usleep(10000);
-				
-			// only going to need TheoryPlay if there's video
-			if(THEORAPLAY_hasVideoStream(decoder))
-			{
-				
-				// This is really bad.  I have to decode the entire movie in order to find
-				// out how many frames there are.
-				while(THEORAPLAY_isDecoding(decoder))
-				{
-					const THEORAPLAY_VideoFrame *video = THEORAPLAY_getVideo(decoder);
-					
-					if(video)
-					{
-						if(frames == 0)
-						{
-							// Get video information
-							SDKFileInfo8->hasVideo				= kPrTrue;
-							SDKFileInfo8->vidInfo.subType		= PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601;
-							SDKFileInfo8->vidInfo.imageWidth	= video->width;
-							SDKFileInfo8->vidInfo.imageHeight	= video->height;
-							SDKFileInfo8->vidInfo.depth			= 24;	// for RGB, no A
-							SDKFileInfo8->vidInfo.fieldType		= prFieldsUnknown; // Matroska talk about DefaultDecodedFieldDuration but...
-							SDKFileInfo8->vidInfo.isStill		= kPrFalse;
-							SDKFileInfo8->vidInfo.noDuration	= imNoDurationFalse;
-							
-							unsigned int fps_num, fps_den;
-							float_to_rational_fps(video->fps, &fps_num, &fps_den);
-							
-							SDKFileInfo8->vidScale				= fps_num;
-							SDKFileInfo8->vidSampleSize			= fps_den;
+            // This is really bad.  I have to decode the entire movie in order to find
+            // out how many frames there are.
+            while(THEORAPLAY_isDecoding(decoder))
+            {
+                const THEORAPLAY_VideoFrame *video = THEORAPLAY_getVideo(decoder);
+                
+                if(video)
+                {
+                    if(frames == 0)
+                    {
+                        // Get video information
+                        SDKFileInfo8->hasVideo				= kPrTrue;
+                        SDKFileInfo8->vidInfo.subType		= PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601;
+                        SDKFileInfo8->vidInfo.imageWidth	= video->width;
+                        SDKFileInfo8->vidInfo.imageHeight	= video->height;
+                        SDKFileInfo8->vidInfo.depth			= 24;	// for RGB, no A
+                        SDKFileInfo8->vidInfo.fieldType		= prFieldsUnknown; // Matroska talk about DefaultDecodedFieldDuration but...
+                        SDKFileInfo8->vidInfo.isStill		= kPrFalse;
+                        SDKFileInfo8->vidInfo.noDuration	= imNoDurationFalse;
+                        
+                        unsigned int fps_num, fps_den;
+                        float_to_rational_fps(video->fps, &fps_num, &fps_den);
+                        
+                        SDKFileInfo8->vidScale				= fps_num;
+                        SDKFileInfo8->vidSampleSize			= fps_den;
 
-							SDKFileInfo8->vidInfo.alphaType		= alphaNone;
-							
-							// pixel aspect ratio should be available, but not exposed in TheoraPlay
-						}
-						
-						THEORAPLAY_freeVideo(video);
-						
-						frames++;
-					}
-					
-					
-					const THEORAPLAY_AudioPacket *audio = THEORAPLAY_getAudio(decoder);
-					
-					if(audio)
-					{
-						THEORAPLAY_freeAudio(audio);
-					}
-					
-					if (!video && !audio)
-						usleep(10000);
-				}
-			}
+                        SDKFileInfo8->vidInfo.alphaType		= alphaNone;
+                        
+                        // pixel aspect ratio should be available, but not exposed in TheoraPlay
+                    }
+                    
+                    THEORAPLAY_freeVideo(video);
+                    
+                    frames++;
+                }
+                
+                
+                const THEORAPLAY_AudioPacket *audio = THEORAPLAY_getAudio(decoder);
+                
+                if(audio)
+                {
+                    if(samples == 0)
+                    {
+                        SDKFileInfo8->hasAudio				= kPrTrue;
+                        SDKFileInfo8->audInfo.numChannels	= audio->channels;
+                        SDKFileInfo8->audInfo.sampleRate	= audio->freq;
+                        SDKFileInfo8->audInfo.sampleType	= kPrAudioSampleType_Compressed;
+                    }
+                    
+                    samples += audio->frames;
+                    
+                    THEORAPLAY_freeAudio(audio);
+                }
+                
+                if (!video && !audio)
+                    usleep(10000);
+            }
 			
 			
 			if( THEORAPLAY_decodingError(decoder) )
@@ -586,6 +589,7 @@ SDKGetInfo8(
 			else if(frames > 0)
 			{
 				SDKFileInfo8->vidDuration = frames * SDKFileInfo8->vidSampleSize;
+                SDKFileInfo8->audDuration = samples;
 							
 
 				// store some values we want to get without going to the file
@@ -594,6 +598,9 @@ SDKGetInfo8(
 
 				localRecP->frameRateNum = SDKFileInfo8->vidScale;
 				localRecP->frameRateDen = SDKFileInfo8->vidSampleSize;
+                
+                localRecP->audioSampleRate			= SDKFileInfo8->audInfo.sampleRate;
+                localRecP->numChannels				= SDKFileInfo8->audInfo.numChannels;
 			}
 			else
 				result = imBadFile;
@@ -871,7 +878,76 @@ SDKImportAudio7(
 	{
 		assert(audioRec7->position >= 0); // Do they really want contiguous samples?
 		
+		THEORAPLAY_Io io = { theora_read, theora_close, SDKfileRef };
 		
+		THEORAPLAY_Decoder *decoder = THEORAPLAY_startDecode(&io, MAX_FRAMES, THEORAPLAY_VIDFMT_IYUV);
+		
+		if(decoder)
+		{
+            csSDK_uint32 samples_read = 0;
+            
+            PrTime audio_pos = 0; // this is the position of this sound packet in the overall movie
+            
+			while(THEORAPLAY_isDecoding(decoder) && (samples_read < audioRec7->size))
+			{
+				const THEORAPLAY_VideoFrame *video = THEORAPLAY_getVideo(decoder);
+				
+				if(video)
+				{
+					THEORAPLAY_freeVideo(video);
+				}
+				
+				
+				const THEORAPLAY_AudioPacket *audio = THEORAPLAY_getAudio(decoder);
+				
+				if(audio)
+				{
+					// This is really bad.  I have to decode everything up to the requested frame.
+                    // Fortunately Premiere doesn't ask for audio just one frame at a time, but it
+                    // also doesn't let me tell it how much to store, because then I'd give it the
+                    // whole movie's worth if I could.
+                    
+                    // these are the positions to copy relative to this this packet, which are likely out of range
+                    int start_sample = audioRec7->position - audio_pos;
+                    int end_sample = audioRec7->position + audioRec7->size - audio_pos;
+                    
+                    if(start_sample < audio->frames && end_sample >= 0)
+                    {
+                        if(start_sample < 0)
+                            start_sample = 0;
+                        
+                        if(end_sample > audio->frames - 1)
+                            end_sample = audio->frames - 1;
+                    
+                        for(int i=start_sample; i <= end_sample; i++)
+                        {
+                            for(int c=0; c < audio->channels; c++)
+                            {
+                                audioRec7->buffer[c][i + audio_pos - audioRec7->position] = audio->samples[(i * audio->channels) + c];
+                            }
+                            
+                            samples_read++;
+                        }
+                    }
+                       
+                    audio_pos += audio->frames;
+                       
+                    
+					THEORAPLAY_freeAudio(audio);
+				}
+				
+				if(!video && !audio)
+					usleep(10000);
+			}
+			
+			
+			if( THEORAPLAY_decodingError(decoder) )
+			{
+				result = imBadFile;
+			}
+			
+			THEORAPLAY_stopDecode(decoder);
+		}
 	}
 	
 					

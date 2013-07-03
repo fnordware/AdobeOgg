@@ -773,7 +773,10 @@ SDKGetInfo8(
 			SDKFileInfo8->audInfo.sampleRate	= info->rate;
 			SDKFileInfo8->audInfo.sampleType	= kPrAudioSampleType_Compressed;
 													
-			SDKFileInfo8->audDuration			= ov_pcm_total(&vf, 0);
+			SDKFileInfo8->audDuration			= ov_pcm_total(&vf, -1);
+            
+            if(SDKFileInfo8->audDuration <= 0)
+                result = imBadFile;
 		}
 #ifdef GOT_FLAC
 		else if(localRecP->fileType == FLAC_filetype)

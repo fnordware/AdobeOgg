@@ -3,7 +3,7 @@
 // Copyright (c) 2013, Brendan Bolles
 // 
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -356,25 +356,32 @@ Convert16to8(const uint16 &v)
 }
 
 
+// I know, this is UGLY!  Very, very ugly!
+// It's basically a straight copy from the encoder_example.c that comes with
+// libtheora, but that uses all kinds of globals and statics that had to go.  At the same time I didn't want to
+// change it too much until I knew my copy was working like the original.  Once
+// we know it's good, then we'll make it pretty.
+
 static
 int fetch_and_process_audio(const PrSDKSequenceAudioSuite *audioSuite, const csSDK_uint32 audioRenderID, csSDK_int32 maxBlip,
  ogg_page *audiopage, ogg_stream_state *vo, vorbis_dsp_state *vd, vorbis_block *vb,
- int &audioflag, int &audio_hz, long &begin_sec, long &begin_usec, long &end_sec, long &end_usec)
+ int &audioflag, int &audio_hz, long &begin_sec, long &begin_usec, long &end_sec, long &end_usec, ogg_int64_t &samples_sofar)
  {
   ogg_packet op;
 
   prMALError result = malNoError;
 
-  static ogg_int64_t samples_sofar=0;
-  ogg_int64_t beginsample = audio_hz*(begin_sec+begin_usec*.000001);
-  ogg_int64_t endsample = audio_hz*(end_sec+end_usec*.000001);
+  ogg_int64_t beginsample = audio_hz*(begin_sec+(begin_usec*.000001));
+  ogg_int64_t endsample = audio_hz*(end_sec+(end_usec*.000001));
+     
+  
   
   while(result == malNoError && !audioflag){
     /* process any audio already buffered */
     if(ogg_stream_pageout(vo,audiopage)>0) return 1;
     if(ogg_stream_eos(vo))return 0;
 
-	  if(samples_sofar>=endsample && endsample>0)
+	  if(samples_sofar>=(endsample - beginsample) && (endsample - beginsample)>0)
 	  {
 		vorbis_analysis_wrote(vd,0);
 	  }
@@ -418,23 +425,34 @@ size_t fread_buf(void *out_buf, size_t elemsz, size_t elem_num, PrMemoryPtr &buf
 
 static int fseek_buf(size_t &buffer_pos, long pos, int whence)
 {
-	assert(whence == SEEK_SET);
-	
-	buffer_pos = pos;
-	
+	if(whence == SEEK_SET)
+        buffer_pos = pos;
+    else if(whence == SEEK_CUR)
+        buffer_pos += pos;
+    else
+        assert(false);
+        
 	return 0;
 }
 
-static size_t fwrite_buf(const void *in_buf, size_t elemsz, size_t elem_num, PrMemoryPtr &buffer, size_t &buffer_size, PrSDKMemoryManagerSuite *memorySuite)
+static size_t fwrite_buf(const void *in_buf, size_t elemsz, size_t elem_num, PrMemoryPtr &buffer, size_t &buffer_pos, size_t &buffer_size, PrSDKMemoryManagerSuite *memorySuite)
 {
-	if(buffer_size == 0)
-		buffer = memorySuite->NewPtr(elemsz * elem_num);
-	else
-		memorySuite->SetPtrSize(&buffer, buffer_size + (elemsz * elem_num));
+    size_t write_size = (elemsz * elem_num);
+	size_t end_of_write = buffer_pos + write_size;
+    
+    if(buffer_size < end_of_write)
+    {
+        if(buffer_size == 0)
+            buffer = memorySuite->NewPtr(end_of_write);
+        else
+            memorySuite->SetPtrSize(&buffer, end_of_write);
+        
+        buffer_size = end_of_write;
+    }
 	
-	memcpy(&buffer[buffer_size], in_buf, (elemsz * elem_num));
+	memcpy(&buffer[buffer_pos], in_buf, write_size);
 	
-	buffer_size += (elemsz * elem_num);
+	buffer_pos += write_size;
 	
 	return elem_num;
 }
@@ -599,17 +617,14 @@ int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_
   /* in two-pass mode's second pass, we need to submit first-pass data */
   if(passno==2){
     for(;;){
-      static unsigned char buffer[80];
-      static int buf_pos;
-      int bytes;
+      unsigned char buffer[80];
       /*Ask the encoder how many bytes it would like.*/
-      bytes=th_encode_ctl(td,TH_ENCCTL_2PASS_IN,NULL,0);
-	  assert(bytes >= 0);
+      int bytes=th_encode_ctl(td,TH_ENCCTL_2PASS_IN,NULL,0);
+	  assert(bytes >= 0 && bytes <= 80);
       /*If it's got enough, stop.*/
       if(bytes==0)break;
       /*Read in some more bytes, if necessary.*/
-      if(bytes>80-buf_pos)bytes=80-buf_pos;
-      if(bytes>0&&fread_buf(buffer+buf_pos,1,bytes,vbr_buffer,vbr_buffer_pos)<bytes){
+      if(bytes>0&&fread_buf(buffer,1,bytes,vbr_buffer,vbr_buffer_pos)<bytes){
         assert(false);
       }
       /*And pass them off.*/
@@ -617,10 +632,9 @@ int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_
       if(ret<0){
         assert(false);
       }
-      /*If the encoder consumed the whole buffer, reset it.*/
-      if(ret>=bytes)buf_pos=0;
-      /*Otherwise remember how much it used.*/
-      else buf_pos+=ret;
+        
+      if(ret < bytes)
+          fseek_buf(vbr_buffer_pos, -(bytes - ret), SEEK_CUR);
     }
   }
   /*We submit the buffer using the size of the picture region.
@@ -652,7 +666,7 @@ int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_
     if(bytes<0){
       assert(false);
     }
-    if(fwrite_buf(buffer,1,bytes,vbr_buffer, vbr_buffer_size, memorySuite)<bytes){
+    if(fwrite_buf(buffer,1,bytes,vbr_buffer, vbr_buffer_pos, vbr_buffer_size, memorySuite)<bytes){
       assert(false);
     }
     //fflush(twopass_file);
@@ -669,7 +683,7 @@ int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_
     if(fseek_buf(vbr_buffer_pos,0,SEEK_SET)<0){
       assert(false);
     }
-    if(fwrite_buf(buffer,1,bytes,vbr_buffer, vbr_buffer_size, memorySuite)<bytes){
+    if(fwrite_buf(buffer,1,bytes,vbr_buffer, vbr_buffer_pos, vbr_buffer_size, memorySuite)<bytes){
       assert(false);
     }
     //fflush(twopass_file);
@@ -758,7 +772,8 @@ prMALError compress_main(PrSDKSequenceRenderSuite	*renderSuite, csSDK_uint32 vid
  PrSDKExportProgressSuite *exportProgressSuite, csSDK_uint32 inExportID,
  csSDK_uint32 fileObject, PrSDKExportFileSuite *fileSuite, bool do_video, bool do_audio,
  int audio_ch, int audio_hz, int pic_w, int pic_h, int video_fps_n, int video_fps_d, int video_par_n, int video_par_d,
- float audio_q, int audio_r, int video_q, int video_r, int twopass, long begin_sec, long begin_usec, long end_sec, long end_usec){
+ float audio_q, int audio_r, int video_q, int video_r, int twopass, Theora_Video_Encoding encoding,
+ long begin_sec, long begin_usec, long end_sec, long end_usec){
 
 	prMALError result = malNoError;
   // former globals
@@ -812,10 +827,12 @@ int buf_delay=-1;
 //long end_sec=-1;
 //long end_usec=0;
 
+ ogg_int64_t samples_sofar = 0;
 
 int                 frame_state=-1;
 ogg_int64_t         frames=0;
-unsigned char      **yuvframe;
+    unsigned char      *yuvframe_d[3] = { NULL, NULL, NULL };
+unsigned char      **yuvframe = yuvframe_d;
 th_ycbcr_buffer     ycbcr;
 
  
@@ -839,7 +856,10 @@ th_ycbcr_buffer     ycbcr;
   vorbis_dsp_state vd; /* central working state for the packet->PCM decoder */
   vorbis_block     vb; /* local working space for packet->PCM decode */
 
-  int speed=-1;
+  int speed= (encoding == THEORA_ENCODING_BEST ? 0 :
+                encoding == THEORA_ENCODING_REALTIME ? 10000000 :
+                -1);
+  speed = -1; // not really dealing with this right now
   int audioflag=0;
   int videoflag=0;
   int akbps=0;
@@ -854,8 +874,8 @@ th_ycbcr_buffer     ycbcr;
   //int twopass=0;
   int passno;
 
-  clock_t clock_start=clock();
-  clock_t clock_end;
+  //clock_t clock_start=clock();
+  //clock_t clock_end;
   double elapsed;
 
 
@@ -904,7 +924,7 @@ th_ycbcr_buffer     ycbcr;
     vorbis_block_init(&vd,&vb);
   }
 
-  for(passno=(twopass==3?1:twopass);passno<=(twopass==3?2:twopass);passno++){
+  for(passno=(twopass==3?1:twopass);passno<=(twopass==3?2:twopass) && result == malNoError;passno++){
     /* Set up Theora encoder */
     if(!do_video){
       assert(false);
@@ -996,7 +1016,7 @@ th_ycbcr_buffer     ycbcr;
       if(fseek_buf(vbr_buffer_pos,0,SEEK_SET)<0){
         assert(false);
       }
-      if(fwrite_buf(buffer,1,bytes,vbr_buffer, vbr_buffer_size, memorySuite)<bytes){
+      if(fwrite_buf(buffer,1,bytes,vbr_buffer, vbr_buffer_pos, vbr_buffer_size, memorySuite)<bytes){
         assert(false);
       }
       //fflush(twopass_file);
@@ -1157,7 +1177,7 @@ th_ycbcr_buffer     ycbcr;
         /* is there an audio page flushed?  If not, fetch one if possible */
         audioflag=fetch_and_process_audio(audioSuite, audioRenderID, maxBlip,
  &audiopage, &vo, &vd, &vb,
- audioflag, audio_hz, begin_sec, begin_usec, end_sec, end_usec);
+ audioflag, audio_hz, begin_sec, begin_usec, end_sec, end_usec, samples_sofar);
 		
 		
 		
@@ -1173,22 +1193,6 @@ th_ycbcr_buffer     ycbcr;
 	
 		
 
-		float progress = (double)frames / (double)((end_sec - begin_sec) * video_fps_n / video_fps_d) ;
-		
-		if(twopass > 1)
-			progress = (progress / 2.f) + (0.5f * passno);
-
-		result = exportProgressSuite->UpdateProgressPercent(inExportID, progress);
-		
-		if(result == suiteError_ExporterSuspended)
-		{
-			result = exportProgressSuite->WaitForResume(inExportID);
-		}
-
-		if(result != malNoError)
-			break;
-			
-		
         /* no pages of either?  Must be end of stream. */
         if(!audioflag && !videoflag)break;
         /* which is earlier; the end of the audio page or the end of the
@@ -1232,9 +1236,28 @@ th_ycbcr_buffer     ycbcr;
         //        "\r      %d:%02d:%02d.%02d audio: %dkbps video: %dkbps                 ",
         //        hours,minutes,seconds,hundredths,akbps,vkbps);
       }
+    
+      float progress = (double)frames / (double)((((end_sec + (end_usec * 0.000001)) - (begin_sec + (begin_usec * 0.000001))) * video_fps_n / video_fps_d) - 1);
+    
+      if(twopass > 1)
+          progress = (progress / 2.f) + (passno == 2 ? 0.5f : 0.f);
+    
+      result = exportProgressSuite->UpdateProgressPercent(inExportID, progress);
+    
+      if(result == suiteError_ExporterSuspended)
+      {
+        result = exportProgressSuite->WaitForResume(inExportID);
+      }
+    
+      if(result != malNoError)
+        break;
     }
     if(do_video)th_encode_free(td);
   }
+    
+    for(int i=0; i < 3; i++)
+        if(yuvframe_d[i] != NULL)
+            free(yuvframe_d[i]);
 
   /* clear out state */
   if(do_audio && twopass!=1){
@@ -1254,8 +1277,8 @@ th_ycbcr_buffer     ycbcr;
   //if(outfile && outfile!=stdout)fclose(outfile);
   //if(twopass_file)fclose(twopass_file);
 
-  clock_end=clock();
-  elapsed=(clock_end-clock_start)/(double)CLOCKS_PER_SEC;
+  //clock_end=clock();
+  //elapsed=(clock_end-clock_start)/(double)CLOCKS_PER_SEC;
 
   return result;
 
@@ -1330,18 +1353,19 @@ exSDKExport(
 								audioFormat == kPrAudioChannelType_Mono ? 1 :
 								2);
 	
-	exParamValues methodP, videoQualityP, bitrateP, vidEncodingP, customArgsP;
+	exParamValues methodP, videoQualityP, bitrateP, encodingP; //customArgsP;
 	paramSuite->GetParamValue(exID, gIdx, TheoraVideoMethod, &methodP);
 	paramSuite->GetParamValue(exID, gIdx, TheoraVideoQuality, &videoQualityP);
 	paramSuite->GetParamValue(exID, gIdx, TheoraVideoBitrate, &bitrateP);
-	paramSuite->GetParamValue(exID, gIdx, TheoraVideoEncoding, &vidEncodingP);
+    paramSuite->GetParamValue(exID, gIdx, TheoraVideoBitrate, &bitrateP);
+    paramSuite->GetParamValue(exID, gIdx, TheoraVideoEncoding, &encodingP);
 	//paramSuite->GetParamValue(exID, gIdx, TheoraCustomArgs, &customArgsP);
 	
 	Theora_Video_Method method = (Theora_Video_Method)methodP.value.intValue;
 	
-	char customArgs[256];
-	ncpyUTF16(customArgs, customArgsP.paramString, 255);
-	customArgs[255] = '\0';
+	//char customArgs[256];
+	//ncpyUTF16(customArgs, customArgsP.paramString, 255);
+	//customArgs[255] = '\0';
 	
 
 	exParamValues audioMethodP, audioQualityP, audioBitrateP;
@@ -1400,9 +1424,9 @@ exSDKExport(
 
 	
 	long begin_sec = (exportInfoP->startTime / ticksPerSecond);
-	long begin_usec = ((exportInfoP->startTime - (begin_sec * ticksPerSecond)) * 1E6) / ticksPerSecond;
+	long begin_usec = ((exportInfoP->startTime - (begin_sec * ticksPerSecond)) * 1000000) / ticksPerSecond;
 	long end_sec = (exportInfoP->endTime / ticksPerSecond);
-	long end_usec = ((exportInfoP->endTime - (end_sec * ticksPerSecond)) * 1E6) / ticksPerSecond;
+	long end_usec = ((exportInfoP->endTime - (end_sec * ticksPerSecond)) * 1000000) / ticksPerSecond;
 	
 	
 	
@@ -1423,7 +1447,7 @@ exSDKExport(
 		video_q = videoQualityP.value.intValue;
 	else
 	{
-		video_r = bitrateP.value.intValue;
+		video_r = bitrateP.value.intValue * 1024;
 		
 		if(methodP.value.intValue == THEORA_METHOD_VBR)
 			twopass = 3;
@@ -1442,7 +1466,7 @@ exSDKExport(
 							audioChannels, sampleRateP.value.floatValue,
 							widthP.value.intValue, heightP.value.intValue, fps.numerator, fps.denominator,
 							pixelAspectRatioP.value.ratioValue.numerator, pixelAspectRatioP.value.ratioValue.denominator,
-							audio_q, audio_r, video_q, video_r, twopass,
+							audio_q, audio_r, video_q, video_r, twopass, (Theora_Video_Encoding)encodingP.value.intValue,
 							begin_sec, begin_usec, end_sec, end_usec);
 	
 	
