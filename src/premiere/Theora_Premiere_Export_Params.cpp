@@ -341,7 +341,7 @@ exSDKGenerateDefaultParams(
 	methodValues.structVersion = 1;
 	methodValues.rangeMin.intValue = THEORA_METHOD_QUALITY;
 	methodValues.rangeMax.intValue = THEORA_METHOD_VBR;
-	methodValues.value.intValue = THEORA_METHOD_QUALITY;
+	methodValues.value.intValue = THEORA_METHOD_BITRATE;
 	methodValues.disabled = kPrFalse;
 	methodValues.hidden = kPrFalse;
 	
@@ -362,7 +362,7 @@ exSDKGenerateDefaultParams(
 	videoQualityValues.rangeMax.intValue = 10;
 	videoQualityValues.value.intValue = 5;
 	videoQualityValues.disabled = kPrFalse;
-	videoQualityValues.hidden = kPrFalse;
+	videoQualityValues.hidden = kPrTrue;
 	
 	exNewParamInfo videoQualityParam;
 	videoQualityParam.structVersion = 1;
@@ -381,7 +381,7 @@ exSDKGenerateDefaultParams(
 	videoBitrateValues.rangeMax.intValue = 9999;
 	videoBitrateValues.value.intValue = 500;
 	videoBitrateValues.disabled = kPrFalse;
-	videoBitrateValues.hidden = kPrTrue;
+	videoBitrateValues.hidden = kPrFalse;
 	
 	exNewParamInfo videoBitrateParam;
 	videoBitrateParam.structVersion = 1;

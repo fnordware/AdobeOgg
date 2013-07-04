@@ -61,6 +61,11 @@ typedef enum {
 	THEORA_ENCODING_BEST
 } Theora_Video_Encoding;
 
+typedef enum {
+    THEORA_CHROMA_420 = 0,
+    THEORA_CHROMA_422,
+    THEORA_CHROMA_444
+} Theora_Chroma_Sampling;
 
 
 #define TheoraPluginVersion		"TheoraPluginVersion"

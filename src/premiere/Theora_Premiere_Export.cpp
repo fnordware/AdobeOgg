@@ -61,19 +61,6 @@ extern "C" {
 }
 
 
-#undef assert
-static void assert(bool q)
-{
-	bool a = q;
-	
-	if(!q)
-	{
-		q = a;
-	}
-}
-
-#pragma mark-
-
 
 static const csSDK_int32 Theora_ID = 'Theo';
 static const csSDK_int32 Theora_Export_Class = 'Theo';
@@ -515,6 +502,8 @@ int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_
 	
 	if(pixFormat == PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709)
 	{
+        assert(dst_c_dec_h == 2 && dst_c_dec_v == 2);
+    
 		char *Y_PixelAddress, *U_PixelAddress, *V_PixelAddress;
 		csSDK_uint32 Y_RowBytes, U_RowBytes, V_RowBytes;
 		
@@ -550,6 +539,18 @@ int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_
 			v += ((w + 1) / 2);
 		}
 	}
+    else if(pixFormat == PrPixelFormat_YUYV_422_8u_709)
+    {
+        assert(dst_c_dec_h == 2 && dst_c_dec_v == 1);
+        
+		char *frameBufferP = NULL;
+		csSDK_int32 rowbytes = 0;
+		
+		pixSuite->GetPixels(renderResult.outFrame, PrPPixBufferAccess_ReadOnly, &frameBufferP);
+		pixSuite->GetRowBytes(renderResult.outFrame, &rowbytes);
+        
+        assert(false); // not ready for this yet
+    }
 	else if(pixFormat == PrPixelFormat_BGRA_4444_8u)
 	{
 		char *frameBufferP = NULL;
@@ -559,20 +560,23 @@ int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_
 		pixSuite->GetRowBytes(renderResult.outFrame, &rowbytes);
 		
 		
+        int ch_rnd_h = dst_c_dec_h - 1;
+        int ch_rnd_v = dst_c_dec_v - 1;
+        
 		unsigned char *yP = (unsigned char *)yuvframe[frame_state];
 		unsigned char *uP = yP + (width * height);
-		unsigned char *vP = uP + (((width + 1) / 2) * ((height + 1) / 2));
+		unsigned char *vP = uP + (((width + ch_rnd_h) / dst_c_dec_h) * ((height + ch_rnd_v) / dst_c_dec_v));
 		
 		size_t y_stride = width * sizeof(unsigned char);
-		size_t uv_stride = ((width + 1) / 2) * sizeof(unsigned char);
+		size_t uv_stride = ((width + ch_rnd_h) / dst_c_dec_h) * sizeof(unsigned char);
 		
 		for(int y = 0; y < height; y++)
 		{
 			// using the conversion found here: http://www.fourcc.org/fccyvrgb.php
 			
 			unsigned char *imgY = yP + (y_stride * y);
-			unsigned char *imgU = uP + (uv_stride * (y / 2));
-			unsigned char *imgV = vP + (uv_stride * (y / 2));
+			unsigned char *imgU = uP + (uv_stride * (y / dst_c_dec_v));
+			unsigned char *imgV = vP + (uv_stride * (y / dst_c_dec_v));
 			
 			// the rows in this kind of Premiere buffer are flipped, FYI (or is it flopped?)
 			unsigned char *prBGRA = (unsigned char *)frameBufferP + (rowbytes * (height - 1 - y));
@@ -587,7 +591,7 @@ int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_
 				// like the clever integer (fixed point) math?
 				*imgY++ = ((257 * (int)*prR) + (504 * (int)*prG) + ( 98 * (int)*prB) + 16500) / 1000;
 				
-				if( (y % 2 == 0) && (x % 2 == 0) )
+				if( (y % dst_c_dec_v == 0) && (x % dst_c_dec_h == 0) )
 				{
 					*imgV++ = ((439 * (int)*prR) - (368 * (int)*prG) - ( 71 * (int)*prB) + 128500) / 1000;
 					*imgU++ = (-(148 * (int)*prR) - (291 * (int)*prG) + (439 * (int)*prB) + 128500) / 1000;
@@ -772,7 +776,7 @@ prMALError compress_main(PrSDKSequenceRenderSuite	*renderSuite, csSDK_uint32 vid
  PrSDKExportProgressSuite *exportProgressSuite, csSDK_uint32 inExportID,
  csSDK_uint32 fileObject, PrSDKExportFileSuite *fileSuite, bool do_video, bool do_audio,
  int audio_ch, int audio_hz, int pic_w, int pic_h, int video_fps_n, int video_fps_d, int video_par_n, int video_par_d,
- float audio_q, int audio_r, int video_q, int video_r, int twopass, Theora_Video_Encoding encoding,
+ float audio_q, int audio_r, int video_q, int video_r, int twopass, Theora_Video_Encoding encoding, Theora_Chroma_Sampling chroma_samp,
  long begin_sec, long begin_usec, long end_sec, long end_usec){
 
 	prMALError result = malNoError;
@@ -796,12 +800,17 @@ int pic_y=0;
 //int video_fps_d=-1;
 //int video_par_n=-1;
 //int video_par_d=-1;
-char interlace;
-int src_c_dec_h=2;
-int src_c_dec_v=2;
+//char interlace;
+//int src_c_dec_h=2;
+//int src_c_dec_v=2;
 int dst_c_dec_h=2;
 int dst_c_dec_v=2;
-char chroma_type[16];
+//char chroma_type[16];
+
+if(chroma_samp == THEORA_CHROMA_422)
+    dst_c_dec_v = 1;
+else if(chroma_samp == THEORA_CHROMA_444)
+    dst_c_dec_v = dst_c_dec_h = 1;
 
 /*The size of each converted frame buffer.*/
 size_t y4m_dst_buf_sz = pic_w*pic_h+2*((pic_w+dst_c_dec_h-1)/dst_c_dec_h)*((pic_h+dst_c_dec_v-1)/dst_c_dec_v);
@@ -1373,9 +1382,15 @@ exSDKExport(
 	paramSuite->GetParamValue(exID, gIdx, TheoraAudioQuality, &audioQualityP);
 	paramSuite->GetParamValue(exID, gIdx, TheoraAudioBitrate, &audioBitrateP);
 	
+    
+    Theora_Chroma_Sampling chroma_samp = THEORA_CHROMA_420; // FYI, nobody can handle 444 right now, it seems
+    
+    PrPixelFormat preferred_pixel_format = chroma_samp == THEORA_CHROMA_420 ? PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709 :
+                                            chroma_samp == THEORA_CHROMA_422 ? PrPixelFormat_YUYV_422_8u_709 :
+                                            PrPixelFormat_BGRA_4444_8u;
 	
 	SequenceRender_ParamsRec renderParms;
-	PrPixelFormat pixelFormats[] = { PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709,
+	PrPixelFormat pixelFormats[] = { preferred_pixel_format,
 									PrPixelFormat_BGRA_4444_8u };// must support BGRA, even if I don't want to
 	
 	renderParms.inRequestedPixelFormatArray = pixelFormats;
@@ -1466,7 +1481,7 @@ exSDKExport(
 							audioChannels, sampleRateP.value.floatValue,
 							widthP.value.intValue, heightP.value.intValue, fps.numerator, fps.denominator,
 							pixelAspectRatioP.value.ratioValue.numerator, pixelAspectRatioP.value.ratioValue.denominator,
-							audio_q, audio_r, video_q, video_r, twopass, (Theora_Video_Encoding)encodingP.value.intValue,
+							audio_q, audio_r, video_q, video_r, twopass, (Theora_Video_Encoding)encodingP.value.intValue, chroma_samp,
 							begin_sec, begin_usec, end_sec, end_usec);
 	
 	
