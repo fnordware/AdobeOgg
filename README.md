@@ -16,7 +16,7 @@ Here are the latest binaries:
 [Mac](http://www.fnordware.com/downloads/Ogg_v0.5b1_mac.zip) | [Win](http://www.fnordware.com/downloads/Ogg_v0.5b1_win.zip)
 
 **Theora for Premiere Pro** _v0.5b4, 20 July 2013_
-[Mac](http://www.fnordware.com/downloads/Theora_v0.5b1_mac.zip) | [Win](http://www.fnordware.com/downloads/Theora_v0.5b4_win.zip)
+[Mac](http://www.fnordware.com/downloads/Theora_v0.5b1_mac.zip) | [Win](http://www.fnordware.com/downloads/Theora_v0.5b1_win.zip)
 
 
 License
