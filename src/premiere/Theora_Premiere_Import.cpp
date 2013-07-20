@@ -91,7 +91,7 @@ static void theora_close(THEORAPLAY_Io *io)
 
 	BOOL result = (pos != 0xFFFFFFFF || NO_ERROR == GetLastError());
 #else
-	BOOL result = SetFilePointerEx(fp, lpos, NULL, method);
+	BOOL result = SetFilePointerEx(fp, lpos, NULL, FILE_BEGIN);
 #endif
 #else
 	OSErr result = FSSetForkPosition(CAST_REFNUM(fp), fsFromStart, 0);
@@ -578,7 +578,13 @@ SDKGetInfo8(
                 }
                 
                 if (!video && !audio)
+				{
+				#ifdef PRWIN_ENV
+					Sleep(10);
+				#else
                     usleep(10000);
+				#endif
+				}
             }
 			
 			
@@ -831,7 +837,13 @@ SDKGetSourceVideo(
 				}
 				
 				if(!video && !audio)
-					usleep(10000);
+				{
+				#ifdef PRWIN_ENV
+					Sleep(10);
+				#else
+                    usleep(10000);
+				#endif
+				}
 			}
 			
 			
@@ -937,7 +949,13 @@ SDKImportAudio7(
 				}
 				
 				if(!video && !audio)
-					usleep(10000);
+				{
+				#ifdef PRWIN_ENV
+					Sleep(10);
+				#else
+                    usleep(10000);
+				#endif
+				}
 			}
 			
 			

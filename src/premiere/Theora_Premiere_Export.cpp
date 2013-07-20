@@ -47,8 +47,12 @@
 	#include <mach/mach.h>
 #else
 	#include <assert.h>
+	#include <math.h>
 	#include <time.h>
 	#include <sys/timeb.h>
+
+	typedef unsigned char uint8;
+	typedef unsigned short uint16;
 #endif
 
 
@@ -746,7 +750,7 @@ int parse_time(long *_sec,long *_usec,const char *_optarg){
     char *pos2;
     secl=strtol(_optarg,&end,10)*60;
     err|=pos!=end;
-    pos2=strchr(++pos,':');
+    pos2=(char *)strchr(++pos,':');
     if(pos2!=NULL){
       secl=(secl+strtol(pos,&end,10))*60;
       err|=pos2!=end;
@@ -768,6 +772,13 @@ static size_t fwrite_pr(const void *in_buf, size_t elemsz, size_t elem_num, csSD
 	return (err == malNoError ? elem_num : 0);
 }
 
+#ifdef PRWIN_ENV
+static inline double
+rint(double in)
+{
+	return (in >= 0 ? floor(in + 0.5) : ceil(in - 0.5));
+}
+#endif
 
 static
 prMALError compress_main(PrSDKSequenceRenderSuite	*renderSuite, csSDK_uint32 videoRenderID, SequenceRender_ParamsRec &renderParms, PrTime ticksPerSecond,
@@ -879,7 +890,7 @@ th_ycbcr_buffer     ycbcr;
   ogg_int64_t video_bytesout=0;
   double timebase;
 
-  fpos_t video_rewind_pos;
+  //fpos_t video_rewind_pos;
   //int twopass=0;
   int passno;
 
