@@ -609,6 +609,8 @@ int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_
 		}
 	}
 	
+	pixSuite->Dispose(renderResult.outFrame);
+	
 	//assert(y4m_aux_buf_read_sz == 0);
 
     /*Now convert the just read frame.*/
