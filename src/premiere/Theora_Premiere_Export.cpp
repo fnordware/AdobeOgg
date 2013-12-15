@@ -555,7 +555,7 @@ int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_
         
         assert(false); // not ready for this yet
     }
-	else if(pixFormat == PrPixelFormat_BGRA_4444_8u)
+	else if(pixFormat == PrPixelFormat_BGRA_4444_8u || pixFormat == PrPixelFormat_ARGB_4444_8u)
 	{
 		char *frameBufferP = NULL;
 		csSDK_int32 rowbytes = 0;
@@ -589,6 +589,16 @@ int fetch_and_process_video_packet(PrSDKSequenceRenderSuite	*renderSuite, csSDK_
 			unsigned char *prG = prBGRA + 1;
 			unsigned char *prR = prBGRA + 2;
 			unsigned char *prA = prBGRA + 3;
+			
+			if(pixFormat == PrPixelFormat_ARGB_4444_8u)
+			{
+				// Media Encoder CS5 insists on handing us this format in some cases,
+				// even though we didn't list it as an option
+				prA = prBGRA + 0;
+				prR = prBGRA + 1;
+				prG = prBGRA + 2;
+				prB = prBGRA + 3;
+			}
 			
 			for(int x=0; x < width; x++)
 			{
