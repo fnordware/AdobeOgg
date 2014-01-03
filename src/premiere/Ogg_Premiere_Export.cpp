@@ -57,6 +57,8 @@ extern "C" {
 
 }
 
+#include <opusfile.h>
+
 #ifdef GOT_FLAC
 #include "FLAC++/encoder.h"
 #endif
@@ -67,6 +69,9 @@ extern "C" {
 
 static const csSDK_int32 Ogg_ID = 'OggV';
 static const csSDK_int32 Ogg_Export_Class = 'OggV';
+
+static const csSDK_int32 Opus_ID = 'Opus';
+static const csSDK_int32 Opus_Export_Class = 'Opus';
 
 static const csSDK_int32 FLAC_ID = 'FLAC';
 static const csSDK_int32 FLAC_Export_Class = 'FLAC';
@@ -124,8 +129,6 @@ exSDKStartup(
 			return exportReturn_IterateExporterDone;
 	}
 	
-	static bool described_ogg = false;
-	
 	if(infoRecP->exportReqIndex == 0)
 	{
 		infoRecP->fileType			= Ogg_ID;
@@ -147,12 +150,33 @@ exSDKStartup(
 		
 		infoRecP->isCacheable		= kPrFalse;
 		
-		described_ogg = true;
+		return exportReturn_IterateExporter;
+	}
+	else if(infoRecP->exportReqIndex == 1)
+	{
+		infoRecP->fileType			= Opus_ID;
+		
+		utf16ncpy(infoRecP->fileTypeName, "Opus", 255);
+		utf16ncpy(infoRecP->fileTypeDefaultExtension, "opus", 255);
+		
+		infoRecP->classID = Opus_Export_Class;
+		
+		infoRecP->exportReqIndex	= 0;
+		infoRecP->wantsNoProgressBar = kPrFalse;
+		infoRecP->hideInUI			= kPrFalse;
+		infoRecP->doesNotSupportAudioOnly = kPrFalse;
+		infoRecP->canExportVideo	= kPrFalse;
+		infoRecP->canExportAudio	= kPrTrue;
+		infoRecP->singleFrameOnly	= kPrFalse;
+		
+		infoRecP->interfaceVersion	= EXPORTMOD_VERSION;
+		
+		infoRecP->isCacheable		= kPrFalse;
 		
 		return exportReturn_IterateExporter;
 	}
 #ifdef GOT_FLAC
-	else if(infoRecP->exportReqIndex == 1)
+	else if(infoRecP->exportReqIndex == 2)
 	{
 		infoRecP->fileType			= FLAC_ID;
 		

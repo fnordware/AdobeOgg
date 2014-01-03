@@ -47,6 +47,8 @@ extern "C" {
 
 }
 
+#include <opusfile.h>
+
 #ifdef GOT_FLAC
 #include "FLAC++/decoder.h"
 #endif
@@ -144,6 +146,43 @@ static long ogg_tell_func(void *datasource)
 }
 
 static ov_callbacks g_ov_callbacks = { ogg_read_func, ogg_seek_func, NULL, ogg_tell_func };
+
+
+
+static int opusfile_read_func(void *_stream, unsigned char *_ptr, int _nbytes)
+{
+	return ogg_read_func(_ptr, 1, _nbytes, _stream);
+}
+
+
+static int opusfile_seek_func(void *_stream, opus_int64 _offset, int _whence)
+{
+	return ogg_seek_func(_stream, _offset, _whence);
+}
+
+
+static opus_int64 opusfile_tell_func(void *_stream)
+{
+	imFileRef fp = static_cast<imFileRef>(_stream);
+	
+#ifdef PRWIN_ENV
+	LARGE_INTEGER lpos, zero;
+
+	zero.QuadPart = 0;
+
+	BOOL result = SetFilePointerEx(fp, zero, &lpos, FILE_CURRENT);
+
+	return lpos.QuadPart;
+#else
+	SInt64 lpos;
+
+	OSErr result = FSGetForkPosition(CAST_REFNUM(fp), &lpos);
+	
+	return lpos;
+#endif
+}
+
+static OpusFileCallbacks g_opusfile_callbacks = { opusfile_read_func, opusfile_seek_func, opusfile_tell_func, NULL };
 
 
 #pragma mark-
@@ -296,6 +335,13 @@ OurDecoder::write_callback(const ::FLAC__Frame *frame, const FLAC__int32 * const
 {
 	if(_buffers != NULL)
 	{
+		// for surround channels
+		// Premiere uses Left, Right, Left Rear, Right Rear, Center, LFE
+		// FLAC uses Left, Right, Center, LFE, Left Rear, Right Rear
+		// http://xiph.org/flac/format.html#frame_header
+		static const int swizzle[] = {0, 1, 4, 5, 2, 3};
+		
+						
 		int samples = _buf_len - _pos;
 		
 		if(samples > frame->header.blocksize)
@@ -307,7 +353,7 @@ OurDecoder::write_callback(const ::FLAC__Frame *frame, const FLAC__int32 * const
 		{
 			for(int c=0; c < get_channels(); c++)
 			{
-				_buffers[c][_pos] = (double)buffer[c][i] / divisor;
+				_buffers[swizzle[c]][_pos] = (double)buffer[c][i] / divisor;
 			}
 			
 			_pos++;
@@ -353,6 +399,7 @@ typedef struct
 	float					audioSampleRate;
 	
 	OggVorbis_File			*vf;
+	OggOpusFile				*opus;
 #ifdef GOT_FLAC
 	OurDecoder				*flac;
 #endif
@@ -361,6 +408,7 @@ typedef struct
 
 
 static const csSDK_int32 Ogg_filetype = 'OggV';
+static const csSDK_int32 Opus_filetype = 'Opus';
 static const csSDK_int32 FLAC_filetype = 'FLAC';
 
 
@@ -425,8 +473,32 @@ SDKGetIndFormat(
 				#endif
 			}while(0);
 			break;
-#ifdef GOT_FLAC
 		case 1:	
+			do{	
+				char formatname[255]	= "Opus";
+				char shortname[32]		= "Opus";
+				char platformXten[256]	= "opus\0\0";
+
+				SDKIndFormatRec->filetype			= Opus_filetype;
+
+				SDKIndFormatRec->canWriteTimecode	= kPrFalse;
+				SDKIndFormatRec->canWriteMetaData	= kPrFalse;
+
+				SDKIndFormatRec->flags = xfCanImport;
+
+				#ifdef PRWIN_ENV
+				strcpy_s(SDKIndFormatRec->FormatName, sizeof (SDKIndFormatRec->FormatName), formatname);				// The long name of the importer
+				strcpy_s(SDKIndFormatRec->FormatShortName, sizeof (SDKIndFormatRec->FormatShortName), shortname);		// The short (menu name) of the importer
+				strcpy_s(SDKIndFormatRec->PlatformExtension, sizeof (SDKIndFormatRec->PlatformExtension), platformXten);	// The 3 letter extension
+				#else
+				strcpy(SDKIndFormatRec->FormatName, formatname);			// The Long name of the importer
+				strcpy(SDKIndFormatRec->FormatShortName, shortname);		// The short (menu name) of the importer
+				strcpy(SDKIndFormatRec->PlatformExtension, platformXten);	// The 3 letter extension
+				#endif
+			}while(0);
+			break;
+#ifdef GOT_FLAC
+		case 2:	
 			do{	
 				char formatname[255]	= "FLAC";
 				char shortname[32]		= "FLAC";
@@ -488,6 +560,7 @@ SDKOpenFile8(
 		localRecP = reinterpret_cast<ImporterLocalRec8Ptr>( *localRecH );
 		
 		localRecP->vf = NULL;
+		localRecP->opus = NULL;
 #ifdef GOT_FLAC
 		localRecP->flac = NULL;
 #endif
@@ -586,6 +659,19 @@ SDKOpenFile8(
 			else
 				result = imBadHeader;
 		}
+		else if(localRecP->fileType == Opus_filetype)
+		{
+			int _error = 0;
+			
+			localRecP->opus = op_open_callbacks(static_cast<void *>(*SDKfileRef), &g_opusfile_callbacks, NULL, 0, &_error);
+			
+			if(localRecP->opus != NULL && _error == 0)
+			{
+				assert(op_link_count(localRecP->opus) == 1); // we're not really handling multi-link scenarios
+			}
+			else
+				result = imBadHeader;
+		}
 #ifdef GOT_FLAC
 		else if(localRecP->fileType == FLAC_filetype)
 		{
@@ -656,6 +742,14 @@ SDKQuietFile(
 			
 			localRecP->vf = NULL;
 		}
+
+		if(localRecP->opus)
+		{
+			op_free(localRecP->opus);
+			
+			localRecP->opus = NULL;
+		}
+
 #ifdef GOT_FLAC
 		if(localRecP->flac)
 		{
@@ -761,7 +855,7 @@ SDKGetInfo8(
 	
 	if(localRecP)
 	{
-		if(localRecP->fileType == Ogg_filetype)
+		if(localRecP->fileType == Ogg_filetype && localRecP->vf != NULL)
 		{
 			OggVorbis_File &vf = *localRecP->vf;
 		
@@ -775,11 +869,18 @@ SDKGetInfo8(
 													
 			SDKFileInfo8->audDuration			= ov_pcm_total(&vf, 0);
 		}
-#ifdef GOT_FLAC
-		else if(localRecP->fileType == FLAC_filetype)
+		else if(localRecP->fileType == Opus_filetype && localRecP->opus != NULL)
 		{
-			assert(localRecP->flac);
-			
+			SDKFileInfo8->hasAudio				= kPrTrue;
+			SDKFileInfo8->audInfo.numChannels	= op_channel_count(localRecP->opus, -1);
+			SDKFileInfo8->audInfo.sampleRate	= 48000; // Opus always uses 48 kHz
+			SDKFileInfo8->audInfo.sampleType	= kPrAudioSampleType_Compressed;
+													
+			SDKFileInfo8->audDuration			= op_pcm_total(localRecP->opus, -1);
+		}
+#ifdef GOT_FLAC
+		else if(localRecP->fileType == FLAC_filetype && localRecP->flac != NULL)
+		{
 			try
 			{
 				localRecP->flac->reset();
@@ -808,9 +909,16 @@ SDKGetInfo8(
 			}
 		}
 #endif
-		
+
 		localRecP->audioSampleRate			= SDKFileInfo8->audInfo.sampleRate;
 		localRecP->numChannels				= SDKFileInfo8->audInfo.numChannels;
+		
+		
+		if(SDKFileInfo8->audInfo.numChannels > 2 && SDKFileInfo8->audInfo.numChannels != 6)
+		{
+			// Premiere can't handle anything but Mono, Stereo, and 5.1
+			result = imUnsupportedAudioFormat;
+		}
 	}
 		
 	stdParms->piSuites->memFuncs->unlockHandle(reinterpret_cast<char**>(ldataH));
@@ -839,7 +947,17 @@ SDKImportAudio7(
 	{
 		assert(audioRec7->position >= 0); // Do they really want contiguous samples?
 		
-		if(localRecP->fileType == Ogg_filetype)
+		// for surround channels
+		// Premiere uses Left, Right, Left Rear, Right Rear, Center, LFE
+		// Ogg (and Opus) uses Left, Center, Right, Left Read, Right Rear, LFE
+		// http://www.xiph.org/vorbis/doc/Vorbis_I_spec.html#x1-800004.3.9
+		static const int surround_swizzle[] = {0, 2, 3, 4, 1, 5};
+		static const int stereo_swizzle[] = {0, 1, 2, 3, 4, 5}; // no swizzle, actually
+		
+		const int *swizzle = localRecP->numChannels > 2 ? surround_swizzle : stereo_swizzle;
+		
+						
+		if(localRecP->fileType == Ogg_filetype && localRecP->vf != NULL)
 		{
 			OggVorbis_File &vf = *localRecP->vf;
 			
@@ -879,7 +997,7 @@ SDKImportAudio7(
 						
 						for(int i=0; i < localRecP->numChannels; i++)
 						{
-							memcpy(&audioRec7->buffer[i][pos], pcm_channels[i], samples_read * sizeof(float));
+							memcpy(&audioRec7->buffer[swizzle[i]][pos], pcm_channels[i], samples_read * sizeof(float));
 						}
 						
 						samples_needed -= samples_read;
@@ -890,8 +1008,64 @@ SDKImportAudio7(
 				}
 			}
 		}
+		else if(localRecP->fileType == Opus_filetype && localRecP->opus != NULL)
+		{
+			const int num_channels = op_channel_count(localRecP->opus, -1);
+		
+			assert(localRecP->numChannels == num_channels);
+			
+			
+			int seek_err = OV_OK;
+			
+			if(audioRec7->position >= 0) // otherwise contiguous, but we should be good at the current position
+				seek_err = op_pcm_seek(localRecP->opus, audioRec7->position);
+				
+			
+			if(seek_err == OV_OK)
+			{
+				float *pcm_buf = (float *)malloc(sizeof(float) * audioRec7->size * num_channels);
+				
+				if(pcm_buf != NULL)
+				{
+					long samples_needed = audioRec7->size;
+					long pos = 0;
+					
+					while(samples_needed > 0 && result == malNoError)
+					{
+						float *_pcm = &pcm_buf[pos * num_channels];
+						
+						int samples_read = op_read_float(localRecP->opus, _pcm, samples_needed * num_channels, NULL);
+						
+						if(samples_read == 0)
+						{
+							// guess we're at the end of the stream
+							break;
+						}
+						else if(samples_read < 0)
+						{
+							result = imDecompressionError;
+						}
+						else
+						{
+							for(int c=0; c < localRecP->numChannels; c++)
+							{
+								for(int i=0; i < samples_read; i++)
+								{
+									audioRec7->buffer[swizzle[c]][pos + i] = _pcm[(i * num_channels) + c];
+								}
+							}
+							
+							samples_needed -= samples_read;
+							pos += samples_read;
+						}
+					}
+					
+					free(pcm_buf);
+				}
+			}
+		}
 #ifdef GOT_FLAC
-		else if(localRecP->fileType == FLAC_filetype)
+		else if(localRecP->fileType == FLAC_filetype && localRecP->flac != NULL)
 		{
 			try
 			{
