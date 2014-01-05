@@ -475,8 +475,8 @@ SDKGetIndFormat(
 			break;
 		case 1:	
 			do{	
-				char formatname[255]	= "Opus";
-				char shortname[32]		= "Opus";
+				char formatname[255]	= "Ogg Opus";
+				char shortname[32]		= "Ogg Opus";
 				char platformXten[256]	= "opus\0\0";
 
 				SDKIndFormatRec->filetype			= Opus_filetype;
@@ -635,6 +635,8 @@ SDKOpenFile8(
 	{
 		localRecP->fileType = SDKfileOpenRec8->fileinfo.filetype;
 		
+		assert(0 == ogg_tell_func(static_cast<void *>(*SDKfileRef)));
+			
 		if(localRecP->fileType == Ogg_filetype)
 		{
 			localRecP->vf = new OggVorbis_File;
@@ -873,7 +875,7 @@ SDKGetInfo8(
 		{
 			SDKFileInfo8->hasAudio				= kPrTrue;
 			SDKFileInfo8->audInfo.numChannels	= op_channel_count(localRecP->opus, -1);
-			SDKFileInfo8->audInfo.sampleRate	= 48000; // Opus always uses 48 kHz
+			SDKFileInfo8->audInfo.sampleRate	= 48000; // Ogg Opus always uses 48 kHz
 			SDKFileInfo8->audInfo.sampleType	= kPrAudioSampleType_Compressed;
 													
 			SDKFileInfo8->audDuration			= op_pcm_total(localRecP->opus, -1);
