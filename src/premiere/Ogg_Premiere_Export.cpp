@@ -386,6 +386,10 @@ typedef enum {
 } Ogg_Method;
 
 
+#define OpusAudioAutoBitrate	"OpusAudioAutoBitrate"
+#define OpusAudioBitrate		"OpusAudioBitrate"
+
+
 #define FLACAudioCompression "FLACAudioCompression"
 
 #ifdef GOT_FLAC
@@ -504,8 +508,8 @@ exSDKExport(
 	
 	
 	
-	const PrAudioChannelType audioFormat = (PrAudioChannelType)channelTypeP.value.intValue;
-	const int audioChannels = (audioFormat == kPrAudioChannelType_51 ? 6 :
+	PrAudioChannelType audioFormat = (PrAudioChannelType)channelTypeP.value.intValue;
+	int audioChannels = (audioFormat == kPrAudioChannelType_51 ? 6 :
 								audioFormat == kPrAudioChannelType_Mono ? 1 :
 								2);
 
@@ -705,15 +709,34 @@ exSDKExport(
 	}
 	else if(fileType == Opus_ID)
 	{
-		const int channels = 2;
+		exParamValues autoBitrateP, audioBitrateP;
+		paramSuite->GetParamValue(exID, gIdx, OpusAudioAutoBitrate, &autoBitrateP);
+		paramSuite->GetParamValue(exID, gIdx, OpusAudioBitrate, &audioBitrateP);
+		
+	
 		const int sample_rate = 48000;
+		
+		const int mapping_family = (audioChannels > 2 ? 1 : 0);
+		
+		const int streams = (audioChannels > 2 ? 4 : 1);
+		const int coupled_streams = (audioChannels > 2 ? 2 : 1);
+		
+		const unsigned char surround_mapping[6] = {0, 4, 1, 2, 3, 5};
+		const unsigned char stereo_mapping[6] = {0, 1, 0, 1, 0, 1};
+		
+		const unsigned char *mapping = (audioChannels > 2 ? surround_mapping : stereo_mapping);
 		
 		int err = -1;
 		
-		OpusEncoder *enc = opus_encoder_create(sample_rate, channels, OPUS_APPLICATION_AUDIO, &err);
+		OpusMSEncoder *enc = opus_multistream_encoder_create(sample_rate, audioChannels,
+															streams, coupled_streams, mapping,
+															OPUS_APPLICATION_AUDIO, &err);
 		
 		if(enc != NULL && err == OPUS_OK)
 		{
+			opus_int32 bitrate = 0;
+			opus_multistream_encoder_ctl(enc, OPUS_GET_BITRATE(&bitrate));
+		
 			result = fileSuite->Open(exportInfoP->fileObject);
 			
 			if(result == malNoError)
@@ -734,15 +757,16 @@ exSDKExport(
 					// ID header
 					unsigned char id_head[28];
 					memset(id_head, 0, 28);
+					size_t id_header_size = 0;
 					
 					strcpy((char *)id_head, "OpusHead");
 					id_head[8] = 1; // version
-					id_head[9] = channels;
+					id_head[9] = audioChannels;
 					
 					
 					// pre-skip
 					opus_int32 skip = 0;
-					opus_encoder_ctl(enc, OPUS_GET_LOOKAHEAD(&skip));
+					opus_multistream_encoder_ctl(enc, OPUS_GET_LOOKAHEAD(&skip));
 					
 					const unsigned short skip_us = skip;
 					id_head[10] = skip_us & 0xff;
@@ -762,7 +786,22 @@ exSDKExport(
 					
 					
 					// channel mapping
-					id_head[18] = 0; // just stereo for now
+					id_head[18] = mapping_family;
+					
+					if(mapping_family == 1)
+					{
+						assert(audioChannels == 6);
+					
+						id_head[19] = streams;
+						id_head[20] = coupled_streams;
+						memcpy(&id_head[21], mapping, 6);
+						
+						id_header_size = 27;
+					}
+					else
+					{
+						id_header_size = 19;
+					}
 					
 					
 					ogg_stream_state os;
@@ -775,7 +814,7 @@ exSDKExport(
 					ogg_packet id_header;
 					
 					id_header.packet = id_head;
-					id_header.bytes = 19; // channel mapping 0 supposed to be exactly this size
+					id_header.bytes = id_header_size;
 					id_header.b_o_s = 0;
 					id_header.e_o_s = 0;
 					id_header.granulepos = 0;
@@ -828,6 +867,10 @@ exSDKExport(
 					
 					
 					// time to encode
+					if(!autoBitrateP.value.intValue) // OPUS_AUTO is the default
+						opus_multistream_encoder_ctl(enc, OPUS_SET_BITRATE(audioBitrateP.value.intValue * 1000));
+					
+					
 					const csSDK_int32 maxBlip = sample_rate / 50; // must end up being 120, 240, 480, 960, 1920, or 2880 for 48kHz
 					
 					const PrTime pr_duration = exportInfoP->endTime - exportInfoP->startTime;
@@ -843,8 +886,8 @@ exSDKExport(
 					}
 					
 					// stereo (interleaved) buffer
-					const size_t stereo_buffer_size = 2 * maxBlip * sizeof(float);
-					float *stereo_buffer = (float *)memorySuite->NewPtr(2 * maxBlip * sizeof(float));
+					const size_t stereo_buffer_size = audioChannels * maxBlip * sizeof(float);
+					float *stereo_buffer = (float *)memorySuite->NewPtr(stereo_buffer_size);
 					
 					// opus buffer
 					const size_t opus_buffer_size = 2 * stereo_buffer_size; // heck, make it twice as big as uncompressed
@@ -867,8 +910,10 @@ exSDKExport(
 							// Premiere uses Left, Right, Left Rear, Right Rear, Center, LFE
 							// Opus uses Left, Center, Right, Left Read, Right Rear, LFE
 							// http://www.xiph.org/vorbis/doc/Vorbis_I_spec.html#x1-800004.3.9
-							//static const int swizzle[] = {0, 4, 1, 2, 3, 5};
-							static const int swizzle[] = {0, 1, 1, 2, 3, 5};
+							static const int stereo_swizzle[] = {0, 1, 0, 1, 0, 1};
+							static const int surround_swizzle[] = {0, 4, 1, 2, 3, 5};
+							
+							const int *swizzle = (audioChannels > 2 ? surround_swizzle : stereo_swizzle);
 							
 							for(int c=0; c < audioChannels; c++)
 							{
@@ -881,7 +926,7 @@ exSDKExport(
 							
 						if(result == malNoError)
 						{
-							opus_int32 packet_size = opus_encode_float(enc, stereo_buffer, maxBlip, opus_buffer, opus_buffer_size);
+							opus_int32 packet_size = opus_multistream_encode_float(enc, stereo_buffer, maxBlip, opus_buffer, opus_buffer_size);
 
 							if(packet_size > 0)
 							{
@@ -951,7 +996,7 @@ exSDKExport(
 				fileSuite->Close(exportInfoP->fileObject);
 			}
 			
-			opus_encoder_destroy(enc);
+			opus_multistream_encoder_destroy(enc);
 		}
 	}
 #ifdef GOT_FLAC
@@ -1143,6 +1188,19 @@ exSDKQueryOutputSettings(
 			else
 				videoBitrate += audioBitrateP.value.intValue;
 		}
+		else if(fileType == Opus_ID)
+		{
+			exParamValues autoBitrateP, audioBitrateP;
+			paramSuite->GetParamValue(exID, gIdx, OpusAudioAutoBitrate, &autoBitrateP);
+			paramSuite->GetParamValue(exID, gIdx, OpusAudioBitrate, &audioBitrateP);
+			
+			if(autoBitrateP.value.intValue)
+			{
+				videoBitrate += (audioChannels * 64);
+			}
+			else
+				videoBitrate += audioBitrateP.value.intValue;
+		}
 		else if(fileType == FLAC_ID)
 		{
 			exParamValues sampleSizeP, FLACcompressionP;
@@ -1302,6 +1360,49 @@ exSDKGenerateDefaultParams(
 		exNewParamInfo audioBitrateParam;
 		audioBitrateParam.structVersion = 1;
 		strncpy(audioBitrateParam.identifier, OggAudioBitrate, 255);
+		audioBitrateParam.paramType = exParamType_int;
+		audioBitrateParam.flags = exParamFlag_slider;
+		audioBitrateParam.paramValues = audioBitrateValues;
+		
+		exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioBitrateParam);
+	}
+	else if(fileType == Opus_ID)
+	{
+		// Audio Codec Settings Group
+		utf16ncpy(groupString, "Codec settings", 255);
+		exportParamSuite->AddParamGroup(exID, gIdx,
+										ADBEAudioTabGroup, ADBEAudioCodecGroup, groupString,
+										kPrFalse, kPrFalse, kPrFalse);
+		
+		// Auto Bitrate
+		exParamValues autoBitrateValues;
+		autoBitrateValues.structVersion = 1;
+		autoBitrateValues.value.intValue = kPrTrue;
+		autoBitrateValues.disabled = kPrFalse;
+		autoBitrateValues.hidden = kPrFalse;
+		
+		exNewParamInfo autoBitrateParam;
+		autoBitrateParam.structVersion = 1;
+		strncpy(autoBitrateParam.identifier, OpusAudioAutoBitrate, 255);
+		autoBitrateParam.paramType = exParamType_bool;
+		autoBitrateParam.flags = exParamFlag_none;
+		autoBitrateParam.paramValues = autoBitrateValues;
+		
+		exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &autoBitrateParam);
+		
+		
+		// Bitrate
+		exParamValues audioBitrateValues;
+		audioBitrateValues.structVersion = 1;
+		audioBitrateValues.rangeMin.intValue = 1;
+		audioBitrateValues.rangeMax.intValue = 512;
+		audioBitrateValues.value.intValue = 128;
+		audioBitrateValues.disabled = kPrTrue;
+		audioBitrateValues.hidden = kPrFalse;
+		
+		exNewParamInfo audioBitrateParam;
+		audioBitrateParam.structVersion = 1;
+		strncpy(audioBitrateParam.identifier, OpusAudioBitrate, 255);
 		audioBitrateParam.paramType = exParamType_int;
 		audioBitrateParam.flags = exParamFlag_slider;
 		audioBitrateParam.paramValues = audioBitrateValues;
@@ -1500,6 +1601,30 @@ exSDKPostProcessParams(
 		
 		exportParamSuite->ChangeParam(exID, gIdx, OggAudioBitrate, &bitrateValues);
 	}
+	else if(fileType == Opus_ID)
+	{
+		// Audio codec settings
+		utf16ncpy(paramString, "Opus settings", 255);
+		exportParamSuite->SetParamName(exID, gIdx, ADBEAudioCodecGroup, paramString);
+		
+		
+		// Auto bitrate
+		utf16ncpy(paramString, "Auto bitrate", 255);
+		exportParamSuite->SetParamName(exID, gIdx, OpusAudioAutoBitrate, paramString);
+		
+		
+		// Bitrate
+		utf16ncpy(paramString, "Bitrate (kb/s)", 255);
+		exportParamSuite->SetParamName(exID, gIdx, OpusAudioBitrate, paramString);
+		
+		exParamValues bitrateValues;
+		exportParamSuite->GetParamValue(exID, gIdx, OpusAudioBitrate, &bitrateValues);
+
+		bitrateValues.rangeMin.intValue = 1;
+		bitrateValues.rangeMax.intValue = 512;
+		
+		exportParamSuite->ChangeParam(exID, gIdx, OpusAudioBitrate, &bitrateValues);
+	}
 	else if(fileType == FLAC_ID)
 	{
 		// Sample Size
@@ -1595,6 +1720,21 @@ exSDKGetParamSummary(
 			stream2 << "Quality " << audioQualityP.value.floatValue;
 		}
 	}
+	else if(fileType == Opus_ID)
+	{
+		exParamValues autoBitrateP, audioBitrateP;
+		paramSuite->GetParamValue(exID, gIdx, OpusAudioAutoBitrate, &autoBitrateP);
+		paramSuite->GetParamValue(exID, gIdx, OpusAudioBitrate, &audioBitrateP);
+	
+		if(autoBitrateP.value.intValue == 1)
+		{
+			stream2 << "Auto bitrate";
+		}
+		else
+		{
+			stream2 << audioBitrateP.value.intValue << " kb/s";
+		}
+	}
 	else if(fileType == FLAC_ID)
 	{
 		exParamValues sampleSizeP, FLACcompressionP;
@@ -1649,6 +1789,19 @@ exSDKValidateParamChanged (
 			
 			paramSuite->ChangeParam(exID, gIdx, OggAudioQuality, &audioQualityP);
 			paramSuite->ChangeParam(exID, gIdx, OggAudioBitrate, &audioBitrateP);
+		}
+	}
+	else if(fileType == Opus_ID)
+	{
+		if(param == OpusAudioAutoBitrate)
+		{
+			exParamValues autoBitrateP, audioBitrateP;
+			paramSuite->GetParamValue(exID, gIdx, OpusAudioAutoBitrate, &autoBitrateP);
+			paramSuite->GetParamValue(exID, gIdx, OpusAudioBitrate, &audioBitrateP);
+			
+			audioBitrateP.disabled = autoBitrateP.value.intValue;
+			
+			paramSuite->ChangeParam(exID, gIdx, OpusAudioBitrate, &audioBitrateP);
 		}
 	}
 	else if(fileType == FLAC_ID)
