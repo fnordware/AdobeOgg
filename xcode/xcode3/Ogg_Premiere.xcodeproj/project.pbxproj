@@ -12,11 +12,27 @@
 		2A136BD2177FD88300E15D71 /* Ogg_Premiere_Import.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2A136BCF177FD88300E15D71 /* Ogg_Premiere_Import.cpp */; };
 		2A136F89178011BB00E15D71 /* libogg.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A553326176ADB3E00BE5A72 /* libogg.a */; };
 		2A136F8C178011C200E15D71 /* libvorbis.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A55332E176ADB4800BE5A72 /* libvorbis.a */; };
+		2A2464FA187760100086B772 /* libopusfile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A2464F7187760070086B772 /* libopusfile.a */; };
 		2AAC33A2178149C3008B1A61 /* libflac.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2AAC33A1178149B7008B1A61 /* libflac.a */; };
+		2AF194C91871F4A1004CDE6F /* libopus.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2AF194C81871F49C004CDE6F /* libopus.a */; };
 		8D01CCCE0486CAD60068D4B7 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08EA7FFBFE8413EDC02AAC07 /* Carbon.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		2A2464F6187760070086B772 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2A2464EF187760070086B772 /* opusfile.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = D2AAC046055464E500DB518D;
+			remoteInfo = opusfile;
+		};
+		2A2464FB1877601B0086B772 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2A2464EF187760070086B772 /* opusfile.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = D2AAC045055464E500DB518D;
+			remoteInfo = opusfile;
+		};
 		2A553325176ADB3E00BE5A72 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 2A55321D176AA87700BE5A72 /* libogg.xcodeproj */;
@@ -59,6 +75,20 @@
 			remoteGlobalIDString = D2AAC045055464E500DB518D;
 			remoteInfo = libflac;
 		};
+		2AF194C71871F49C004CDE6F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2AF194C31871F49C004CDE6F /* opus.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = D2AAC046055464E500DB518D;
+			remoteInfo = opus;
+		};
+		2AF194D31871F4C0004CDE6F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2AF194C31871F49C004CDE6F /* opus.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = D2AAC045055464E500DB518D;
+			remoteInfo = opus;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -88,8 +118,10 @@
 		2A136BCF177FD88300E15D71 /* Ogg_Premiere_Import.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Ogg_Premiere_Import.cpp; sourceTree = "<group>"; };
 		2A136BD0177FD88300E15D71 /* Ogg_Premiere_Import.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Ogg_Premiere_Import.h; sourceTree = "<group>"; };
 		2A1377221780872C00E15D71 /* flac.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = flac.xcodeproj; path = ext/flac.xcodeproj; sourceTree = "<group>"; };
+		2A2464EF187760070086B772 /* opusfile.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = opusfile.xcodeproj; path = ext/opusfile.xcodeproj; sourceTree = "<group>"; };
 		2A55321D176AA87700BE5A72 /* libogg.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = libogg.xcodeproj; path = ext/libogg.xcodeproj; sourceTree = "<group>"; };
 		2A553220176AA87700BE5A72 /* libvorbis.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = libvorbis.xcodeproj; path = ext/libvorbis.xcodeproj; sourceTree = "<group>"; };
+		2AF194C31871F49C004CDE6F /* opus.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = opus.xcodeproj; path = ext/opus.xcodeproj; sourceTree = "<group>"; };
 		8D01CCD10486CAD60068D4B7 /* Ogg_Premiere_Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Ogg_Premiere_Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -102,6 +134,8 @@
 				2A136F89178011BB00E15D71 /* libogg.a in Frameworks */,
 				2A136F8C178011C200E15D71 /* libvorbis.a in Frameworks */,
 				2AAC33A2178149C3008B1A61 /* libflac.a in Frameworks */,
+				2AF194C91871F4A1004CDE6F /* libopus.a in Frameworks */,
+				2A2464FA187760100086B772 /* libopusfile.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -115,6 +149,8 @@
 				089C167CFE841241C02AAC07 /* Resources */,
 				2A55321D176AA87700BE5A72 /* libogg.xcodeproj */,
 				2A553220176AA87700BE5A72 /* libvorbis.xcodeproj */,
+				2AF194C31871F49C004CDE6F /* opus.xcodeproj */,
+				2A2464EF187760070086B772 /* opusfile.xcodeproj */,
 				2A1377221780872C00E15D71 /* flac.xcodeproj */,
 				089C1671FE841209C02AAC07 /* External Frameworks and Libraries */,
 				19C28FB4FE9D528D11CA2CBB /* Products */,
@@ -149,6 +185,14 @@
 			isa = PBXGroup;
 			children = (
 				1157612B0AD5C4A200B6DA40 /* Ogg Premiere.bundle */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		2A2464F0187760070086B772 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2A2464F7187760070086B772 /* libopusfile.a */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -189,6 +233,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		2AF194C41871F49C004CDE6F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2AF194C81871F49C004CDE6F /* libopus.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -207,6 +259,8 @@
 			dependencies = (
 				2A553333176ADB5600BE5A72 /* PBXTargetDependency */,
 				2A553337176ADB5600BE5A72 /* PBXTargetDependency */,
+				2AF194D41871F4C0004CDE6F /* PBXTargetDependency */,
+				2A2464FC1877601B0086B772 /* PBXTargetDependency */,
 				2AAC33A4178149CA008B1A61 /* PBXTargetDependency */,
 			);
 			name = "Ogg Premiere";
@@ -245,6 +299,14 @@
 					ProductGroup = 2A55332A176ADB4800BE5A72 /* Products */;
 					ProjectRef = 2A553220176AA87700BE5A72 /* libvorbis.xcodeproj */;
 				},
+				{
+					ProductGroup = 2AF194C41871F49C004CDE6F /* Products */;
+					ProjectRef = 2AF194C31871F49C004CDE6F /* opus.xcodeproj */;
+				},
+				{
+					ProductGroup = 2A2464F0187760070086B772 /* Products */;
+					ProjectRef = 2A2464EF187760070086B772 /* opusfile.xcodeproj */;
+				},
 			);
 			projectRoot = "";
 			targets = (
@@ -254,6 +316,13 @@
 /* End PBXProject section */
 
 /* Begin PBXReferenceProxy section */
+		2A2464F7187760070086B772 /* libopusfile.a */ = {
+			isa = PBXReferenceProxy;
+			fileType = archive.ar;
+			path = libopusfile.a;
+			remoteRef = 2A2464F6187760070086B772 /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
 		2A553326176ADB3E00BE5A72 /* libogg.a */ = {
 			isa = PBXReferenceProxy;
 			fileType = archive.ar;
@@ -273,6 +342,13 @@
 			fileType = archive.ar;
 			path = libflac.a;
 			remoteRef = 2AAC33A0178149B7008B1A61 /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		2AF194C81871F49C004CDE6F /* libopus.a */ = {
+			isa = PBXReferenceProxy;
+			fileType = archive.ar;
+			path = libopus.a;
+			remoteRef = 2AF194C71871F49C004CDE6F /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
 /* End PBXReferenceProxy section */
@@ -311,6 +387,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		2A2464FC1877601B0086B772 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = opusfile;
+			targetProxy = 2A2464FB1877601B0086B772 /* PBXContainerItemProxy */;
+		};
 		2A553333176ADB5600BE5A72 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = libvorbis;
@@ -325,6 +406,11 @@
 			isa = PBXTargetDependency;
 			name = libflac;
 			targetProxy = 2AAC33A3178149CA008B1A61 /* PBXContainerItemProxy */;
+		};
+		2AF194D41871F4C0004CDE6F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = opus;
+			targetProxy = 2AF194D31871F4C0004CDE6F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -376,6 +462,8 @@
 					../../ext/libogg/include,
 					../../ext/libvorbis/include,
 					../../ext/libvorbis/lib,
+					../../ext/opus/include,
+					../../ext/opusfile/include,
 					../../ext/flac/include,
 				);
 				PREBINDING = NO;
@@ -402,6 +490,8 @@
 					../../ext/libogg/include,
 					../../ext/libvorbis/include,
 					../../ext/libvorbis/lib,
+					../../ext/opus/include,
+					../../ext/opusfile/include,
 					../../ext/flac/include,
 				);
 				PREBINDING = NO;
