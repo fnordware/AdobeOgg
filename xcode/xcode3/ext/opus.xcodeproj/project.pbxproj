@@ -224,7 +224,6 @@
 		2AF193D21871EF72004CDE6F /* mlp.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF192B31871EF72004CDE6F /* mlp.c */; };
 		2AF193D31871EF72004CDE6F /* mlp.h in Headers */ = {isa = PBXBuildFile; fileRef = 2AF192B41871EF72004CDE6F /* mlp.h */; };
 		2AF193D41871EF72004CDE6F /* mlp_data.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF192B51871EF72004CDE6F /* mlp_data.c */; };
-		2AF193D51871EF72004CDE6F /* mlp_train.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF192B61871EF72004CDE6F /* mlp_train.c */; };
 		2AF193D61871EF72004CDE6F /* mlp_train.h in Headers */ = {isa = PBXBuildFile; fileRef = 2AF192B71871EF72004CDE6F /* mlp_train.h */; };
 		2AF193D71871EF72004CDE6F /* opus.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF192B81871EF72004CDE6F /* opus.c */; };
 		2AF193D91871EF72004CDE6F /* opus_decoder.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF192BA1871EF72004CDE6F /* opus_decoder.c */; };
@@ -1059,7 +1058,6 @@
 				2AF193D01871EF72004CDE6F /* analysis.c in Sources */,
 				2AF193D21871EF72004CDE6F /* mlp.c in Sources */,
 				2AF193D41871EF72004CDE6F /* mlp_data.c in Sources */,
-				2AF193D51871EF72004CDE6F /* mlp_train.c in Sources */,
 				2AF193D71871EF72004CDE6F /* opus.c in Sources */,
 				2AF193D91871EF72004CDE6F /* opus_decoder.c in Sources */,
 				2AF193DB1871EF72004CDE6F /* opus_encoder.c in Sources */,
