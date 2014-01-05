@@ -4,6 +4,8 @@ Microsoft Visual Studio Solution File, Format Version 10.00
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Ogg", "Ogg_Premiere.vcproj", "{8C4F19A7-759E-4D52-BAEC-7ADF50FBFE8F}"
 	ProjectSection(ProjectDependencies) = postProject
 		{3A214E06-B95E-4D61-A291-1F8DF2EC10FD} = {3A214E06-B95E-4D61-A291-1F8DF2EC10FD}
+		{DB95CD59-543F-4803-AFA8-202AB60468D9} = {DB95CD59-543F-4803-AFA8-202AB60468D9}
+		{E1905C5C-4485-4B38-BCCE-9FEDDA145189} = {E1905C5C-4485-4B38-BCCE-9FEDDA145189}
 		{CEBDE98B-A6AA-46E6-BC79-FAAF823DB9EC} = {CEBDE98B-A6AA-46E6-BC79-FAAF823DB9EC}
 		{15CBFEFF-7965-41F5-B4E2-21E8795C9159} = {15CBFEFF-7965-41F5-B4E2-21E8795C9159}
 	EndProjectSection
@@ -13,6 +15,10 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libvorbis_static", "..\..\ext\libvorbis\win32\VS2008\libvorbis\libvorbis_static.vcproj", "{3A214E06-B95E-4D61-A291-1F8DF2EC10FD}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libvorbisfile", "..\..\ext\libvorbis\win32\VS2008\libvorbisfile\libvorbisfile_static.vcproj", "{CEBDE98B-A6AA-46E6-BC79-FAAF823DB9EC}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "opus", "ext\opus.vcproj", "{DB95CD59-543F-4803-AFA8-202AB60468D9}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "opusfile", "ext\opusfile.vcproj", "{E1905C5C-4485-4B38-BCCE-9FEDDA145189}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -36,6 +42,14 @@ Global
 		{CEBDE98B-A6AA-46E6-BC79-FAAF823DB9EC}.Debug|x64.Build.0 = Debug|x64
 		{CEBDE98B-A6AA-46E6-BC79-FAAF823DB9EC}.Release|x64.ActiveCfg = Release|x64
 		{CEBDE98B-A6AA-46E6-BC79-FAAF823DB9EC}.Release|x64.Build.0 = Release|x64
+		{DB95CD59-543F-4803-AFA8-202AB60468D9}.Debug|x64.ActiveCfg = Debug|x64
+		{DB95CD59-543F-4803-AFA8-202AB60468D9}.Debug|x64.Build.0 = Debug|x64
+		{DB95CD59-543F-4803-AFA8-202AB60468D9}.Release|x64.ActiveCfg = Release|x64
+		{DB95CD59-543F-4803-AFA8-202AB60468D9}.Release|x64.Build.0 = Release|x64
+		{E1905C5C-4485-4B38-BCCE-9FEDDA145189}.Debug|x64.ActiveCfg = Debug|x64
+		{E1905C5C-4485-4B38-BCCE-9FEDDA145189}.Debug|x64.Build.0 = Debug|x64
+		{E1905C5C-4485-4B38-BCCE-9FEDDA145189}.Release|x64.ActiveCfg = Release|x64
+		{E1905C5C-4485-4B38-BCCE-9FEDDA145189}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
