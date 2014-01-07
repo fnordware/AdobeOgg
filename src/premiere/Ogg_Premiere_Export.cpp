@@ -734,8 +734,9 @@ exSDKExport(
 		
 		if(enc != NULL && err == OPUS_OK)
 		{
-			opus_int32 bitrate = 0;
-			opus_multistream_encoder_ctl(enc, OPUS_GET_BITRATE(&bitrate));
+			if(!autoBitrateP.value.intValue) // OPUS_AUTO is the default
+				opus_multistream_encoder_ctl(enc, OPUS_SET_BITRATE(audioBitrateP.value.intValue * 1000));
+					
 		
 			result = fileSuite->Open(exportInfoP->fileObject);
 			
@@ -867,9 +868,6 @@ exSDKExport(
 					
 					
 					// time to encode
-					if(!autoBitrateP.value.intValue) // OPUS_AUTO is the default
-						opus_multistream_encoder_ctl(enc, OPUS_SET_BITRATE(audioBitrateP.value.intValue * 1000));
-					
 					
 					const csSDK_int32 maxBlip = sample_rate / 50; // must end up being 120, 240, 480, 960, 1920, or 2880 for 48kHz
 					
