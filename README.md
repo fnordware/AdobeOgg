@@ -5,15 +5,15 @@ This is a project where I'm building plug-ins for the [Ogg](http://www.xiph.org/
 
 Right now there are working [Ogg Vorbis](http://www.vorbis.com/) and [Theora](http://www.theora.org/) plug-ins for Premiere Pro, considered to be a beta release.
 
-The Vorbis plug-in includes support for [FLAC](http://xiph.org/flac/) as well, but only on Mac currently. If anyone wants to try to solve my Windows linking problems, be my guest.
+The Vorbis plug-in includes support for [Ogg Opus](http://opus-codec.org/) and [FLAC](http://xiph.org/flac/) as well, but FLAC is only on Mac currently. If anyone wants to try to help with my Windows linking problems, be my guest.
 
 
 Download
 --------
 Here are the latest binaries:
 
-**Ogg Vorbis for Premiere Pro** _v0.5b1, 1 July 2013_
-[Mac](http://www.fnordware.com/downloads/Ogg_v0.5b1_mac.zip) | [Win](http://www.fnordware.com/downloads/Ogg_v0.5b1_win.zip)
+**Ogg Vorbis for Premiere Pro** _v0.5b2, 7 January 2014_
+[Mac](http://www.fnordware.com/downloads/Ogg_v0.5b2_mac.zip) | [Win](http://www.fnordware.com/downloads/Ogg_v0.5b2_win.zip)
 
 **Theora for Premiere Pro** _v0.5b3, 15 December 2013_
 [Mac](http://www.fnordware.com/downloads/Theora_v0.5b3_mac.zip) | [Win](http://www.fnordware.com/downloads/Theora_v0.5b3_win.zip)
