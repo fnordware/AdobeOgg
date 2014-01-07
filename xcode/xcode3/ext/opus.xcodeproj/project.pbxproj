@@ -77,7 +77,6 @@
 		2AF193101871EF72004CDE6F /* mfrngcod.h in Headers */ = {isa = PBXBuildFile; fileRef = 2AF191C51871EF72004CDE6F /* mfrngcod.h */; };
 		2AF193111871EF72004CDE6F /* modes.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF191C61871EF72004CDE6F /* modes.c */; };
 		2AF193121871EF72004CDE6F /* modes.h in Headers */ = {isa = PBXBuildFile; fileRef = 2AF191C71871EF72004CDE6F /* modes.h */; };
-		2AF193131871EF72004CDE6F /* opus_custom_demo.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF191C81871EF72004CDE6F /* opus_custom_demo.c */; };
 		2AF193141871EF72004CDE6F /* os_support.h in Headers */ = {isa = PBXBuildFile; fileRef = 2AF191C91871EF72004CDE6F /* os_support.h */; };
 		2AF193151871EF72004CDE6F /* pitch.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF191CA1871EF72004CDE6F /* pitch.c */; };
 		2AF193161871EF72004CDE6F /* pitch.h in Headers */ = {isa = PBXBuildFile; fileRef = 2AF191CB1871EF72004CDE6F /* pitch.h */; };
@@ -949,7 +948,6 @@
 				2AF1930C1871EF72004CDE6F /* mathops.c in Sources */,
 				2AF1930E1871EF72004CDE6F /* mdct.c in Sources */,
 				2AF193111871EF72004CDE6F /* modes.c in Sources */,
-				2AF193131871EF72004CDE6F /* opus_custom_demo.c in Sources */,
 				2AF193151871EF72004CDE6F /* pitch.c in Sources */,
 				2AF193171871EF72004CDE6F /* quant_bands.c in Sources */,
 				2AF193191871EF72004CDE6F /* rate.c in Sources */,
