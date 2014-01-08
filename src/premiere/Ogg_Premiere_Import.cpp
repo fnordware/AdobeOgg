@@ -30,7 +30,7 @@
 
 // ------------------------------------------------------------------------
 //
-// Ogg Vorbis (and FLAC) plug-in for Premiere
+// Ogg Vorbis (and Opus and FLAC) plug-in for Premiere
 //
 // by Brendan Bolles <brendan@fnordware.com>
 //
@@ -49,9 +49,7 @@ extern "C" {
 
 #include <opusfile.h>
 
-#ifdef GOT_FLAC
 #include "FLAC++/decoder.h"
-#endif
 
 #include <assert.h>
 #include <math.h>
@@ -187,7 +185,7 @@ static OpusFileCallbacks g_opusfile_callbacks = { opusfile_read_func, opusfile_s
 
 #pragma mark-
 
-#ifdef GOT_FLAC
+
 class OurDecoder : public FLAC::Decoder::Stream
 {
   public:
@@ -376,7 +374,7 @@ OurDecoder::metadata_callback(const ::FLAC__StreamMetadata *metadata)
 		_bits_per_sample = metadata->data.stream_info.bits_per_sample;
 	}
 }
-#endif // GOT_FLAC
+
 
 #pragma mark-
 
@@ -400,9 +398,7 @@ typedef struct
 	
 	OggVorbis_File			*vf;
 	OggOpusFile				*opus;
-#ifdef GOT_FLAC
 	OurDecoder				*flac;
-#endif
 	
 } ImporterLocalRec8, *ImporterLocalRec8Ptr, **ImporterLocalRec8H;
 
@@ -497,7 +493,6 @@ SDKGetIndFormat(
 				#endif
 			}while(0);
 			break;
-#ifdef GOT_FLAC
 		case 2:	
 			do{	
 				char formatname[255]	= "FLAC";
@@ -522,7 +517,6 @@ SDKGetIndFormat(
 				#endif
 			}while(0);
 			break;
-#endif
 		default:
 			result = imBadFormatIndex;
 	}
@@ -561,9 +555,7 @@ SDKOpenFile8(
 		
 		localRecP->vf = NULL;
 		localRecP->opus = NULL;
-#ifdef GOT_FLAC
 		localRecP->flac = NULL;
-#endif
 		
 		localRecP->importerID = SDKfileOpenRec8->inImporterID;
 		localRecP->fileType = SDKfileOpenRec8->fileinfo.filetype;
@@ -674,7 +666,6 @@ SDKOpenFile8(
 			else
 				result = imBadHeader;
 		}
-#ifdef GOT_FLAC
 		else if(localRecP->fileType == FLAC_filetype)
 		{
 			try
@@ -692,7 +683,6 @@ SDKOpenFile8(
 				result = imBadHeader;
 			}
 		}
-#endif
 	}
 	
 	// close file and delete private data if we got a bad file
@@ -752,7 +742,6 @@ SDKQuietFile(
 			localRecP->opus = NULL;
 		}
 
-#ifdef GOT_FLAC
 		if(localRecP->flac)
 		{
 			localRecP->flac->finish();
@@ -761,7 +750,7 @@ SDKQuietFile(
 			
 			localRecP->flac = NULL;
 		}
-#endif
+
 		stdParms->piSuites->memFuncs->unlockHandle(reinterpret_cast<char**>(ldataH));
 
 	#ifdef PRWIN_ENV
@@ -880,7 +869,6 @@ SDKGetInfo8(
 													
 			SDKFileInfo8->audDuration			= op_pcm_total(localRecP->opus, -1);
 		}
-#ifdef GOT_FLAC
 		else if(localRecP->fileType == FLAC_filetype && localRecP->flac != NULL)
 		{
 			try
@@ -910,7 +898,6 @@ SDKGetInfo8(
 				result = imBadFile;
 			}
 		}
-#endif
 
 		localRecP->audioSampleRate			= SDKFileInfo8->audInfo.sampleRate;
 		localRecP->numChannels				= SDKFileInfo8->audInfo.numChannels;
@@ -1066,7 +1053,6 @@ SDKImportAudio7(
 				}
 			}
 		}
-#ifdef GOT_FLAC
 		else if(localRecP->fileType == FLAC_filetype && localRecP->flac != NULL)
 		{
 			try
@@ -1123,7 +1109,6 @@ SDKImportAudio7(
 				result = imDecompressionError;
 			}
 		}
-#endif
 	}
 	
 					
