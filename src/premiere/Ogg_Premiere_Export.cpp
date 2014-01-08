@@ -562,6 +562,7 @@ exSDKExport(
 					vorbis_block_init(&vd, &vb);
 					
 					ogg_stream_state os;
+					srand(time(NULL));
 					ogg_stream_init(&os, rand());
 					
 					ogg_packet id_header;
@@ -801,6 +802,7 @@ exSDKExport(
 					
 					
 					ogg_stream_state os;
+					srand(time(NULL));
 					ogg_stream_init(&os, rand());
 					
 					ogg_int64_t ogg_granule_pos = 0;
