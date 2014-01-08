@@ -47,8 +47,8 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\..\src\premiere;..\..\ext\libvorbis\include;..\..\ext\libogg\include;..\..\ext\opus\include;..\..\ext\opusfile\include;&quot;..\..\ext\Premiere Pro CS5 Win SDK\Examples\Headers&quot;;&quot;..\..\ext\Premiere Pro CS5 Win SDK\Examples\Utils&quot;"
-				PreprocessorDefinitions="ISOLATION_AWARE_ENABLED=1;_DEBUG;WIN32;_WIN64;_WINDOWS;PRWIN_ENV;MSWindows;KDU_PENTIUM_MSVC"
+				AdditionalIncludeDirectories="..\..\src\premiere;..\..\ext\libvorbis\include;..\..\ext\libogg\include;..\..\ext\opus\include;..\..\ext\opusfile\include;..\..\ext\flac\include;&quot;..\..\ext\Premiere Pro CS5 Win SDK\Examples\Headers&quot;;&quot;..\..\ext\Premiere Pro CS5 Win SDK\Examples\Utils&quot;"
+				PreprocessorDefinitions="ISOLATION_AWARE_ENABLED=1;_DEBUG;WIN32;_WIN64;_WINDOWS;PRWIN_ENV;MSWindows;FLAC__NO_DLL"
 				RuntimeLibrary="3"
 				StructMemberAlignment="0"
 				RuntimeTypeInfo="true"
@@ -137,8 +137,8 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="2"
-				AdditionalIncludeDirectories="..\..\src\premiere;..\..\ext\libvorbis\include;..\..\ext\libogg\include;..\..\ext\opus\include;..\..\ext\opusfile\include;&quot;..\..\ext\Premiere Pro CS5 Win SDK\Examples\Headers&quot;;&quot;..\..\ext\Premiere Pro CS5 Win SDK\Examples\Utils&quot;"
-				PreprocessorDefinitions="ISOLATION_AWARE_ENABLED=1;NDEBUG;WIN32;_WIN64;_WINDOWS;PRWIN_ENV;MSWindows;KDU_PENTIUM_MSVC"
+				AdditionalIncludeDirectories="..\..\src\premiere;..\..\ext\libvorbis\include;..\..\ext\libogg\include;..\..\ext\opus\include;..\..\ext\opusfile\include;..\..\ext\flac\include;&quot;..\..\ext\Premiere Pro CS5 Win SDK\Examples\Headers&quot;;&quot;..\..\ext\Premiere Pro CS5 Win SDK\Examples\Utils&quot;"
+				PreprocessorDefinitions="ISOLATION_AWARE_ENABLED=1;NDEBUG;WIN32;_WIN64;_WINDOWS;PRWIN_ENV;MSWindows;FLAC__NO_DLL"
 				RuntimeLibrary="2"
 			/>
 			<Tool
