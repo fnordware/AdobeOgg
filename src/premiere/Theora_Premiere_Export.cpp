@@ -1180,7 +1180,7 @@ th_ycbcr_buffer     ycbcr;
     /* setup complete.  Raw processing loop */
     for(;;){
       int audio_or_video=-1;
-      if(passno==1){
+      if(passno==1 && do_video){
         ogg_packet op;
 		
 		
@@ -1205,16 +1205,18 @@ th_ycbcr_buffer     ycbcr;
         ogg_page videopage;
 		
 		
-		
+		if(do_audio)
+		{
         /* is there an audio page flushed?  If not, fetch one if possible */
         audioflag=fetch_and_process_audio(audioSuite, audioRenderID, maxBlip,
  &audiopage, &vo, &vd, &vb,
  audioflag, audio_hz, begin_sec, begin_usec, end_sec, end_usec, samples_sofar);
+		}
 		
 		
 		
-		
-		
+		if(do_video)
+		{
         /* is there a video page flushed?  If not, fetch one if possible */
         videoflag=fetch_and_process_video(renderSuite, videoRenderID, renderParms, ticksPerSecond,
 					pixSuite, pix2Suite, &videopage,
@@ -1222,7 +1224,7 @@ th_ycbcr_buffer     ycbcr;
 					videoflag, video_fps_n, video_fps_d, begin_sec, begin_usec, end_sec, end_usec,
 					y4m_dst_buf_sz, y4m_aux_buf_sz, pic_w, pic_h, dst_c_dec_h, dst_c_dec_v,
 					frame_state, frames, yuvframe, ycbcr);
-	
+		}
 		
 
         /* no pages of either?  Must be end of stream. */
