@@ -813,7 +813,7 @@ exSDKExport(
 					
 					id_header.packet = id_head;
 					id_header.bytes = id_header_size;
-					id_header.b_o_s = 0;
+					id_header.b_o_s = 1;
 					id_header.e_o_s = 0;
 					id_header.granulepos = 0;
 					id_header.packetno = ogg_packet_num++;
@@ -925,9 +925,6 @@ exSDKExport(
 
 							if(packet_size > 0)
 							{
-								long b_o_s = (ogg_granule_pos == 0) ? 1 : 0;
-								long e_o_s = (samples == samples_to_get) ? 1 : 0;
-							
 								assert(opus_packet_get_samples_per_frame(opus_buffer, sample_rate) == maxBlip);
 								assert(opus_packet_get_nb_frames(opus_buffer, packet_size) == 1);
 								
@@ -938,8 +935,8 @@ exSDKExport(
 								
 								op.packet = opus_buffer;
 								op.bytes = packet_size;
-								op.b_o_s = b_o_s;
-								op.e_o_s = e_o_s;
+								op.b_o_s = 0;
+								op.e_o_s = (samples == samples_to_get ? 1 : 0);
 								op.granulepos = ogg_granule_pos;
 								op.packetno = ogg_packet_num++;
 								
