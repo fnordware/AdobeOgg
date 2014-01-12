@@ -887,7 +887,7 @@ SDKGetInfo8(
 				SDKFileInfo8->audInfo.sampleType	= bitDepth == 8 ? kPrAudioSampleType_8BitInt :
 														bitDepth == 16 ? kPrAudioSampleType_16BitInt :
 														bitDepth == 24 ? kPrAudioSampleType_24BitInt :
-														bitDepth == 32 ? kPrAudioSampleType_32BitFloat :
+														bitDepth == 32 ? kPrAudioSampleType_32BitInt :
 														bitDepth == 64 ? kPrAudioSampleType_64BitFloat :
 														kPrAudioSampleType_Compressed;
 														
