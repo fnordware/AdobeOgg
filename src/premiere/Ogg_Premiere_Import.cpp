@@ -356,11 +356,9 @@ OurDecoder::write_callback(const ::FLAC__Frame *frame, const FLAC__int32 * const
 			
 			_pos++;
 		}
-		
-		return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
 	}
 	
-	return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+	return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
 }
 
 
@@ -1064,6 +1062,10 @@ SDKImportAudio7(
 				
 				long samples_needed = audioRec7->size;
 				
+				// calling seek will cause existing buffers to flush,
+				// which is why we haven't called set_buffers() yet
+				bool sought = localRecP->flac->seek_absolute(audioRec7->position);
+				
 				
 				localRecP->flac->set_buffers(audioRec7->buffer, samples_needed);
 				
@@ -1072,12 +1074,17 @@ SDKImportAudio7(
 				
 				size_t buffer_position = 0;
 				
-				// FYI, libflac will "write" some audio when you call the seek function.  Of course!
-				bool sought = localRecP->flac->seek_absolute(audioRec7->position);
-				
 				if(sought)
 				{
 					do{
+						if(samples_needed > 0 && !eof)
+						{
+							bool processed = localRecP->flac->process_single();
+							
+							if(!processed)
+								samples_needed = 0;
+						}
+							
 						size_t new_buffer_position = localRecP->flac->get_pos();
 						
 						int samples_read = (new_buffer_position - buffer_position);
@@ -1091,14 +1098,6 @@ SDKImportAudio7(
 							
 						buffer_position = new_buffer_position;
 						
-						if(samples_needed > 0 && !eof)
-						{
-							bool processed = localRecP->flac->process_single();
-							
-							if(!processed)
-								samples_needed = 0;
-						}
-							
 					}while(samples_needed > 0 && !eof);
 				}
 				
