@@ -196,7 +196,7 @@ class OurDecoder : public FLAC::Decoder::Stream
 	unsigned get_sample_rate() const { return _sample_rate; }
 	unsigned get_bits_per_sample() const { return _bits_per_sample; }
 	
-	void set_buffers(float **buffers, size_t buf_len) { _buffers = buffers; _buf_len = buf_len; _pos = 0; }
+	void set_buffers(float **buffers, size_t buf_len, FLAC__uint64 start_sample) { _buffers = buffers; _buf_len = buf_len; _start_sample = start_sample; _pos = 0; }
 	size_t get_pos() const { return _pos; }
 	
   protected:
@@ -219,6 +219,7 @@ class OurDecoder : public FLAC::Decoder::Stream
 	
 	size_t _pos;
 	size_t _buf_len;
+	FLAC__uint64 _start_sample;
 	
 	unsigned _channels;
 	unsigned _sample_rate;
@@ -339,11 +340,22 @@ OurDecoder::write_callback(const ::FLAC__Frame *frame, const FLAC__int32 * const
 		// http://xiph.org/flac/format.html#frame_header
 		static const int swizzle[] = {0, 1, 4, 5, 2, 3};
 		
-						
+		
+		assert(frame->header.number_type == FLAC__FRAME_NUMBER_TYPE_SAMPLE_NUMBER);
+		
+		int buffer_offset = 0;
+		
+		if(_start_sample > frame->header.number.sample_number)
+			buffer_offset = _start_sample - frame->header.number.sample_number;
+		
+		assert(buffer_offset == 0); // I think I would sometimes get a non-zero offset, but haven't seen it yet
+		
+		assert(_start_sample + buffer_offset + _pos == frame->header.number.sample_number);
+		
 		int samples = _buf_len - _pos;
 		
-		if(samples > frame->header.blocksize)
-			samples = frame->header.blocksize;
+		if(samples > frame->header.blocksize - buffer_offset)
+			samples = frame->header.blocksize - buffer_offset;
 		
 		double divisor = (1L << (frame->header.bits_per_sample - 1));
 		
@@ -351,7 +363,7 @@ OurDecoder::write_callback(const ::FLAC__Frame *frame, const FLAC__int32 * const
 		{
 			for(int c=0; c < get_channels(); c++)
 			{
-				_buffers[swizzle[c]][_pos] = (double)buffer[c][i] / divisor;
+				_buffers[swizzle[c]][_pos] = (double)buffer[c][i + buffer_offset] / divisor;
 			}
 			
 			_pos++;
@@ -675,6 +687,10 @@ SDKOpenFile8(
 				FLAC__StreamDecoderInitStatus init_status = localRecP->flac->init();
 				
 				assert(init_status == FLAC__STREAM_DECODER_INIT_STATUS_OK && localRecP->flac->is_valid());
+				
+				bool ok = localRecP->flac->process_until_end_of_metadata();
+				
+				assert(ok);
 			}
 			catch(...)
 			{
@@ -871,11 +887,6 @@ SDKGetInfo8(
 		{
 			try
 			{
-				localRecP->flac->reset();
-			
-				bool ok = localRecP->flac->process_until_end_of_metadata();
-				
-			
 				SDKFileInfo8->hasAudio				= kPrTrue;
 				SDKFileInfo8->audInfo.numChannels	= localRecP->flac->get_channels();
 				SDKFileInfo8->audInfo.sampleRate	= localRecP->flac->get_sample_rate();
@@ -1055,19 +1066,21 @@ SDKImportAudio7(
 		{
 			try
 			{
-				localRecP->flac->reset();
+				//localRecP->flac->reset();
 				
+				assert(audioRec7->position >= 0); // not handling Premiere's continuous reads
 				
-				assert(audioRec7->position >= 0);
+				assert(localRecP->flac->get_channels() == localRecP->numChannels);
+				
 				
 				long samples_needed = audioRec7->size;
 				
-				// calling seek will cause existing buffers to flush,
-				// which is why we haven't called set_buffers() yet
+				
+				localRecP->flac->set_buffers(audioRec7->buffer, samples_needed, audioRec7->position);
+				
+				
+				// Calling seek will cause flac to "write" some audio, of course!
 				bool sought = localRecP->flac->seek_absolute(audioRec7->position);
-				
-				
-				localRecP->flac->set_buffers(audioRec7->buffer, samples_needed);
 				
 				
 				bool eof = false;
@@ -1077,14 +1090,6 @@ SDKImportAudio7(
 				if(sought)
 				{
 					do{
-						if(samples_needed > 0 && !eof)
-						{
-							bool processed = localRecP->flac->process_single();
-							
-							if(!processed)
-								samples_needed = 0;
-						}
-							
 						size_t new_buffer_position = localRecP->flac->get_pos();
 						
 						int samples_read = (new_buffer_position - buffer_position);
@@ -1098,10 +1103,18 @@ SDKImportAudio7(
 							
 						buffer_position = new_buffer_position;
 						
+						if(samples_needed > 0 && !eof)
+						{
+							bool processed = localRecP->flac->process_single();
+							
+							if(!processed)
+								samples_needed = 0;
+						}
+							
 					}while(samples_needed > 0 && !eof);
 				}
 				
-				localRecP->flac->set_buffers(NULL, 0); // don't trust libflac not to write at inopportune times
+				localRecP->flac->set_buffers(NULL, 0, 0); // don't trust libflac not to write at inopportune times
 			}
 			catch(...)
 			{
