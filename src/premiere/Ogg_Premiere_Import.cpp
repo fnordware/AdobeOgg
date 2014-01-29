@@ -40,12 +40,8 @@
 #include "Ogg_Premiere_Import.h"
 
 
-extern "C" {
-
 #include <vorbis/codec.h>
 #include <vorbis/vorbisfile.h>
-
-}
 
 #include <opusfile.h>
 

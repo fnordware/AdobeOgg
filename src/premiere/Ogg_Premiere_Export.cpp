@@ -50,12 +50,8 @@
 #endif
 
 
-extern "C" {
-
 #include <vorbis/codec.h>
 #include <vorbis/vorbisenc.h>
-
-}
 
 #include <opus_multistream.h>
 
