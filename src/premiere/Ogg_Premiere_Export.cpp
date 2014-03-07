@@ -30,7 +30,7 @@
 
 // ------------------------------------------------------------------------
 //
-// Ogg Vorbis (and FLAC) plug-in for Premiere
+// Ogg Vorbis (and Opus and FLAC) plug-in for Premiere
 //
 // by Brendan Bolles <brendan@fnordware.com>
 //
@@ -50,16 +50,12 @@
 #endif
 
 
-extern "C" {
-
 #include <vorbis/codec.h>
 #include <vorbis/vorbisenc.h>
 
-}
+#include <opus_multistream.h>
 
-#ifdef GOT_FLAC
 #include "FLAC++/encoder.h"
-#endif
 
 
 #include <sstream>
@@ -67,6 +63,9 @@ extern "C" {
 
 static const csSDK_int32 Ogg_ID = 'OggV';
 static const csSDK_int32 Ogg_Export_Class = 'OggV';
+
+static const csSDK_int32 Opus_ID = 'Opus';
+static const csSDK_int32 Opus_Export_Class = 'Opus';
 
 static const csSDK_int32 FLAC_ID = 'FLAC';
 static const csSDK_int32 FLAC_Export_Class = 'FLAC';
@@ -124,8 +123,6 @@ exSDKStartup(
 			return exportReturn_IterateExporterDone;
 	}
 	
-	static bool described_ogg = false;
-	
 	if(infoRecP->exportReqIndex == 0)
 	{
 		infoRecP->fileType			= Ogg_ID;
@@ -147,12 +144,32 @@ exSDKStartup(
 		
 		infoRecP->isCacheable		= kPrFalse;
 		
-		described_ogg = true;
+		return exportReturn_IterateExporter;
+	}
+	else if(infoRecP->exportReqIndex == 1)
+	{
+		infoRecP->fileType			= Opus_ID;
+		
+		utf16ncpy(infoRecP->fileTypeName, "Ogg Opus", 255);
+		utf16ncpy(infoRecP->fileTypeDefaultExtension, "opus", 255);
+		
+		infoRecP->classID = Opus_Export_Class;
+		
+		infoRecP->exportReqIndex	= 0;
+		infoRecP->wantsNoProgressBar = kPrFalse;
+		infoRecP->hideInUI			= kPrFalse;
+		infoRecP->doesNotSupportAudioOnly = kPrFalse;
+		infoRecP->canExportVideo	= kPrFalse;
+		infoRecP->canExportAudio	= kPrTrue;
+		infoRecP->singleFrameOnly	= kPrFalse;
+		
+		infoRecP->interfaceVersion	= EXPORTMOD_VERSION;
+		
+		infoRecP->isCacheable		= kPrFalse;
 		
 		return exportReturn_IterateExporter;
 	}
-#ifdef GOT_FLAC
-	else if(infoRecP->exportReqIndex == 1)
+	else if(infoRecP->exportReqIndex == 2)
 	{
 		infoRecP->fileType			= FLAC_ID;
 		
@@ -176,7 +193,6 @@ exSDKStartup(
 		return exportReturn_IterateExporter;	// Supposed to return exportReturn_IterateExporterDone here
 												// but then Premiere doesn't recognize FLAC.  It's a bug.
 	}
-#endif
 
 	return exportReturn_IterateExporterDone;
 }
@@ -343,6 +359,8 @@ exSDKFileExtension(
 {
 	if(exportFileExtensionRecP->fileType == FLAC_ID)
 		utf16ncpy(exportFileExtensionRecP->outFileExtension, "flac", 255);
+	else if(exportFileExtensionRecP->fileType == Opus_ID)
+		utf16ncpy(exportFileExtensionRecP->outFileExtension, "opus", 255);
 	else
 		utf16ncpy(exportFileExtensionRecP->outFileExtension, "ogg", 255);
 		
@@ -360,9 +378,12 @@ typedef enum {
 } Ogg_Method;
 
 
+#define OpusAudioAutoBitrate	"OpusAudioAutoBitrate"
+#define OpusAudioBitrate		"OpusAudioBitrate"
+
+
 #define FLACAudioCompression "FLACAudioCompression"
 
-#ifdef GOT_FLAC
 class OurEncoder : public FLAC::Encoder::Stream
 {
   public:
@@ -431,15 +452,15 @@ AudioClip(double in, unsigned int max_val)
 	// My understanding with audio is that it uses the full signed range.
 	// So an 8-bit sample is allowed to go from -128 to 127.  It's not
 	// balanced in positive and negative, but I guess that's OK?
-	return (in > 0 ?
-				(in < (max_val - 1) ? in : (max_val - 1)) :
-				(in > (-(int)max_val) ? in : (-(int)max_val) )
+	return (in >= 0 ?
+				(in < (max_val - 1) ? (in + 0.5) : (max_val - 1)) :
+				(in > (-(int)max_val) ? (in - 0.5) : (-(int)max_val) )
 			);
 			
 	// BTW, the need to cast max_val into an int before the - operation
 	// was the source of a horrific bug I gave myself.  Sigh.
 }
-#endif
+
 
 #define OV_OK 0
 
@@ -478,8 +499,8 @@ exSDKExport(
 	
 	
 	
-	const PrAudioChannelType audioFormat = (PrAudioChannelType)channelTypeP.value.intValue;
-	const int audioChannels = (audioFormat == kPrAudioChannelType_51 ? 6 :
+	PrAudioChannelType audioFormat = (PrAudioChannelType)channelTypeP.value.intValue;
+	int audioChannels = (audioFormat == kPrAudioChannelType_51 ? 6 :
 								audioFormat == kPrAudioChannelType_Mono ? 1 :
 								2);
 
@@ -494,11 +515,6 @@ exSDKExport(
 		int v_err = OV_OK;
 
 		vorbis_info vi;
-		vorbis_comment vc;
-		vorbis_dsp_state vd;
-		vorbis_block vb;
-		ogg_stream_state os;
-
 		vorbis_info_init(&vi);
 		
 		if(audioMethodP.value.intValue == OGG_BITRATE)
@@ -533,19 +549,25 @@ exSDKExport(
 														&audioRenderID);
 				if(result == malNoError)
 				{
+					vorbis_comment vc;
+					vorbis_dsp_state vd;
+					vorbis_block vb;
+
 					vorbis_comment_init(&vc);
 					vorbis_analysis_init(&vd, &vi);
 					vorbis_block_init(&vd, &vb);
 					
-					ogg_stream_init(&os,rand());
+					ogg_stream_state os;
+					srand(time(NULL));
+					ogg_stream_init(&os, rand());
 					
-					ogg_packet header;
+					ogg_packet id_header;
 					ogg_packet header_comm;
 					ogg_packet header_code;
 					
-					vorbis_analysis_headerout(&vd, &vc, &header, &header_comm, &header_code);
+					vorbis_analysis_headerout(&vd, &vc, &id_header, &header_comm, &header_code);
 					
-					ogg_stream_packetin(&os, &header);
+					ogg_stream_packetin(&os, &id_header);
 					ogg_stream_packetin(&os, &header_comm);
 					ogg_stream_packetin(&os, &header_code);
 			
@@ -562,11 +584,21 @@ exSDKExport(
 					
 					// How am I supposed to know the frame rate for maxBlip?  This is audio-only.
 					// How about this....
-					csSDK_int32 maxBlip = sampleRateP.value.floatValue / 100;
+					const csSDK_int32 maxBlip = sampleRateP.value.floatValue / 100;
 					//mySettings->sequenceAudioSuite->GetMaxBlip(audioRenderID, frameRateP.value.timeValue, &maxBlip);
 					
-					PrTime pr_duration = exportInfoP->endTime - exportInfoP->startTime;
-					long long total_samples = (PrTime)sampleRateP.value.floatValue * pr_duration / ticksPerSecond;
+					float *temp_buffer[6] = {NULL, NULL, NULL, NULL, NULL, NULL};
+					
+					if(audioChannels > 2)
+					{
+						for(int i=0; i < audioChannels; i++)
+						{
+							temp_buffer[i] = (float *)memorySuite->NewPtr(sizeof(float) * maxBlip);
+						}
+					}
+					
+					const PrTime pr_duration = exportInfoP->endTime - exportInfoP->startTime;
+					const long long total_samples = (PrTime)sampleRateP.value.floatValue * pr_duration / ticksPerSecond;
 					long long samples_to_get = total_samples;
 					
 					while(samples_to_get >= 0 && result == malNoError)
@@ -580,7 +612,26 @@ exSDKExport(
 						{
 							float **buffer = vorbis_analysis_buffer(&vd, samples);
 							
-							result = audioSuite->GetAudio(audioRenderID, samples, buffer, false);
+							float **prbuffer = audioChannels > 2 ? temp_buffer : buffer;
+							
+							result = audioSuite->GetAudio(audioRenderID, samples, prbuffer, false);
+							
+							if(audioChannels > 2)
+							{
+								// copy Premiere audio to Vorbis buffer, swizzling channels
+								// Premiere uses Left, Right, Left Rear, Right Rear, Center, LFE
+								// Ogg uses Left, Center, Right, Left Read, Right Rear, LFE
+								// http://www.xiph.org/vorbis/doc/Vorbis_I_spec.html#x1-800004.3.9
+								static const int swizzle[] = {0, 4, 1, 2, 3, 5};
+								
+								for(int c=0; c < audioChannels; c++)
+								{
+									for(int i=0; i < samples; i++)
+									{
+										buffer[swizzle[c]][i] = prbuffer[c][i];
+									}
+								}
+							}
 						}
 							
 						if(result == malNoError)
@@ -627,22 +678,315 @@ exSDKExport(
 						}
 					}
 					
+					for(int i=0; i < audioChannels; i++)
+					{
+						if(temp_buffer[i] != NULL)
+							memorySuite->PrDisposePtr((PrMemoryPtr)temp_buffer[i]);
+					}
+					
 					ogg_stream_clear(&os);
 					vorbis_block_clear(&vb);
 					vorbis_dsp_clear(&vd);
 					vorbis_comment_clear(&vc);
 					vorbis_info_clear(&vi);
+					
+					audioSuite->ReleaseAudioRenderer(exID, audioRenderID);
 				}
 				
 				fileSuite->Close(exportInfoP->fileObject);
-				
-				audioSuite->ReleaseAudioRenderer(exID, audioRenderID);
 			}
 		}
 		else
 			result = exportReturn_InternalError;
 	}
-#ifdef GOT_FLAC
+	else if(fileType == Opus_ID)
+	{
+		exParamValues autoBitrateP, audioBitrateP;
+		paramSuite->GetParamValue(exID, gIdx, OpusAudioAutoBitrate, &autoBitrateP);
+		paramSuite->GetParamValue(exID, gIdx, OpusAudioBitrate, &audioBitrateP);
+		
+	
+		const int sample_rate = 48000;
+		
+		const int mapping_family = (audioChannels > 2 ? 1 : 0);
+		
+		const int streams = (audioChannels > 2 ? 4 : 1);
+		const int coupled_streams = (audioChannels > 2 ? 2 : 1);
+		
+		const unsigned char surround_mapping[6] = {0, 4, 1, 2, 3, 5};
+		const unsigned char stereo_mapping[6] = {0, 1, 0, 1, 0, 1};
+		
+		const unsigned char *mapping = (audioChannels > 2 ? surround_mapping : stereo_mapping);
+		
+		int err = -1;
+		
+		OpusMSEncoder *enc = opus_multistream_encoder_create(sample_rate, audioChannels,
+															streams, coupled_streams, mapping,
+															OPUS_APPLICATION_AUDIO, &err);
+		
+		if(enc != NULL && err == OPUS_OK)
+		{
+			if(!autoBitrateP.value.intValue) // OPUS_AUTO is the default
+				opus_multistream_encoder_ctl(enc, OPUS_SET_BITRATE(audioBitrateP.value.intValue * 1000));
+					
+		
+			result = fileSuite->Open(exportInfoP->fileObject);
+			
+			if(result == malNoError)
+			{
+				csSDK_uint32 audioRenderID = 0;
+				result = audioSuite->MakeAudioRenderer(exID,
+														exportInfoP->startTime,
+														audioFormat,
+														kPrAudioSampleType_32BitFloat,
+														sample_rate, 
+														&audioRenderID);
+				if(result == malNoError)
+				{
+					// build Opus headers
+					// http://wiki.xiph.org/OggOpus
+					// http://tools.ietf.org/html/draft-terriberry-oggopus-01
+					
+					// ID header
+					unsigned char id_head[28];
+					memset(id_head, 0, 28);
+					size_t id_header_size = 0;
+					
+					strcpy((char *)id_head, "OpusHead");
+					id_head[8] = 1; // version
+					id_head[9] = audioChannels;
+					
+					
+					// pre-skip
+					opus_int32 skip = 0;
+					opus_multistream_encoder_ctl(enc, OPUS_GET_LOOKAHEAD(&skip));
+					
+					const unsigned short skip_us = skip;
+					id_head[10] = skip_us & 0xff;
+					id_head[11] = skip_us >> 8;
+					
+					
+					// sample rate
+					const unsigned int sample_rate_ui = sample_rate;
+					id_head[12] = sample_rate_ui & 0xff;
+					id_head[13] = (sample_rate_ui & 0xff00) >> 8;
+					id_head[14] = (sample_rate_ui & 0xff0000) >> 16;
+					id_head[15] = (sample_rate_ui & 0xff000000) >> 24;
+					
+					
+					// output gain (set to 0)
+					id_head[16] = id_head[17] = 0;
+					
+					
+					// channel mapping
+					id_head[18] = mapping_family;
+					
+					if(mapping_family == 1)
+					{
+						assert(audioChannels == 6);
+					
+						id_head[19] = streams;
+						id_head[20] = coupled_streams;
+						memcpy(&id_head[21], mapping, 6);
+						
+						id_header_size = 27;
+					}
+					else
+					{
+						id_header_size = 19;
+					}
+					
+					
+					ogg_stream_state os;
+					srand(time(NULL));
+					ogg_stream_init(&os, rand());
+					
+					ogg_int64_t ogg_granule_pos = 0;
+					ogg_int64_t ogg_packet_num = 0;
+					
+					
+					ogg_packet id_header;
+					
+					id_header.packet = id_head;
+					id_header.bytes = id_header_size;
+					id_header.b_o_s = 1;
+					id_header.e_o_s = 0;
+					id_header.granulepos = 0;
+					id_header.packetno = ogg_packet_num++;
+					
+					ogg_stream_packetin(&os, &id_header);
+					
+					
+					// Comment header
+					unsigned char comment_head[32];
+					memset(comment_head, 0, 32);
+					
+					strcpy((char *)comment_head, "OpusTags");
+					
+					unsigned int vendor_string_len = 8; // strlen("AdobeOgg") == 8 
+					comment_head[8] = vendor_string_len & 0xff;
+					comment_head[9] = (vendor_string_len & 0xff00) >> 8;
+					comment_head[10] = (vendor_string_len & 0xff0000) >> 16;
+					comment_head[11] = (vendor_string_len & 0xff000000) >> 24;
+					
+					strcpy((char *)&comment_head[12], "AdobeOgg");
+					
+					unsigned int list_len = 0;
+					comment_head[20] = list_len & 0xff;
+					comment_head[21] = (list_len & 0xff00) >> 8;
+					comment_head[22] = (list_len & 0xff0000) >> 16;
+					comment_head[23] = (list_len & 0xff000000) >> 24;
+					
+					
+					ogg_packet comment_header;
+					
+					comment_header.packet = comment_head;
+					comment_header.bytes = 24;
+					comment_header.b_o_s = 0;
+					comment_header.e_o_s = 0;
+					comment_header.granulepos = 0;
+					comment_header.packetno = ogg_packet_num++;
+					
+					ogg_stream_packetin(&os, &comment_header);
+					
+					
+					// write headers
+					ogg_page og;
+					
+					while( ogg_stream_flush(&os, &og) )
+					{
+						fileSuite->Write(exportInfoP->fileObject, og.header, og.header_len);
+						fileSuite->Write(exportInfoP->fileObject, og.body, og.body_len);
+					}
+					
+					
+					// time to encode
+					
+					const csSDK_int32 maxBlip = sample_rate / 50; // must end up being 120, 240, 480, 960, 1920, or 2880 for 48kHz
+					
+					const PrTime pr_duration = exportInfoP->endTime - exportInfoP->startTime;
+					const long long total_samples = (PrTime)sample_rate * pr_duration / ticksPerSecond;
+					long long samples_to_get = total_samples;
+					
+					
+					float *pr_buffer[6] = {NULL, NULL, NULL, NULL, NULL, NULL};
+					
+					for(int i=0; i < audioChannels; i++)
+					{
+						pr_buffer[i] = (float *)memorySuite->NewPtr(sizeof(float) * maxBlip);
+					}
+					
+					// stereo (interleaved) buffer
+					const size_t stereo_buffer_size = audioChannels * maxBlip * sizeof(float);
+					float *stereo_buffer = (float *)memorySuite->NewPtr(stereo_buffer_size);
+					
+					// opus buffer
+					const size_t opus_buffer_size = 2 * stereo_buffer_size; // heck, make it twice as big as uncompressed
+					unsigned char *opus_buffer = (unsigned char *)memorySuite->NewPtr(opus_buffer_size);
+					
+					while(samples_to_get > 0 && result == malNoError)
+					{
+						int samples = samples_to_get;
+						
+						if(samples > maxBlip)
+							samples = maxBlip;
+						else
+							memset(stereo_buffer, 0, stereo_buffer_size); // zero out buffer
+						
+						if(samples > 0)
+						{
+							result = audioSuite->GetAudio(audioRenderID, samples, pr_buffer, false);
+						
+							// copy Premiere audio to Opus buffer, swizzling channels
+							// Premiere uses Left, Right, Left Rear, Right Rear, Center, LFE
+							// Opus uses Left, Center, Right, Left Read, Right Rear, LFE
+							// http://www.xiph.org/vorbis/doc/Vorbis_I_spec.html#x1-800004.3.9
+							static const int stereo_swizzle[] = {0, 1, 0, 1, 0, 1};
+							static const int surround_swizzle[] = {0, 4, 1, 2, 3, 5};
+							
+							const int *swizzle = (audioChannels > 2 ? surround_swizzle : stereo_swizzle);
+							
+							for(int c=0; c < audioChannels; c++)
+							{
+								for(int i=0; i < samples; i++)
+								{
+									stereo_buffer[(i * audioChannels) + swizzle[c]] = pr_buffer[c][i];
+								}
+							}
+						}
+							
+						if(result == malNoError)
+						{
+							opus_int32 packet_size = opus_multistream_encode_float(enc, stereo_buffer, maxBlip, opus_buffer, opus_buffer_size);
+
+							if(packet_size > 0)
+							{
+								assert(opus_packet_get_samples_per_frame(opus_buffer, sample_rate) == maxBlip);
+								assert(opus_packet_get_nb_frames(opus_buffer, packet_size) == 1);
+								
+								ogg_granule_pos += samples;
+								
+								
+								ogg_packet op;
+								
+								op.packet = opus_buffer;
+								op.bytes = packet_size;
+								op.b_o_s = 0;
+								op.e_o_s = (samples == samples_to_get ? 1 : 0);
+								op.granulepos = ogg_granule_pos;
+								op.packetno = ogg_packet_num++;
+								
+								ogg_stream_packetin(&os, &op);
+								
+								
+								while( ogg_stream_flush(&os, &og) )
+								{
+									fileSuite->Write(exportInfoP->fileObject, og.header, og.header_len);
+									fileSuite->Write(exportInfoP->fileObject, og.body, og.body_len);
+								}
+							}
+							else
+								result = exportReturn_InternalError;
+						}
+						
+						if(result == malNoError)
+						{
+							float progress = (double)(total_samples - samples_to_get) / (double)total_samples;
+							
+							result = mySettings->exportProgressSuite->UpdateProgressPercent(exID, progress);
+							
+							if(result == suiteError_ExporterSuspended)
+							{
+								result = mySettings->exportProgressSuite->WaitForResume(exID);
+							}
+						}
+						
+						samples_to_get -= samples;
+					}
+					
+					
+					memorySuite->PrDisposePtr((PrMemoryPtr)stereo_buffer);
+					memorySuite->PrDisposePtr((PrMemoryPtr)opus_buffer);
+					
+					for(int i=0; i < audioChannels; i++)
+					{
+						if(pr_buffer[i] != NULL)
+							memorySuite->PrDisposePtr((PrMemoryPtr)pr_buffer[i]);
+					}
+
+						
+					ogg_stream_clear(&os);
+					
+				
+					audioSuite->ReleaseAudioRenderer(exID, audioRenderID);
+				}
+				
+				fileSuite->Close(exportInfoP->fileObject);
+			}
+			
+			opus_multistream_encoder_destroy(enc);
+		}
+	}
 	else if(fileType == FLAC_ID)
 	{
 		exParamValues sampleSizeP, FLACcompressionP;
@@ -650,10 +994,10 @@ exSDKExport(
 		paramSuite->GetParamValue(exID, gIdx, FLACAudioCompression, &FLACcompressionP);
 		
 		
-		csSDK_int32 maxBlip = sampleRateP.value.floatValue / 100;
+		const csSDK_int32 maxBlip = sampleRateP.value.floatValue / 100;
 		
-		PrTime pr_duration = exportInfoP->endTime - exportInfoP->startTime;
-		long long total_samples = (PrTime)sampleRateP.value.floatValue * pr_duration / ticksPerSecond;
+		const PrTime pr_duration = exportInfoP->endTime - exportInfoP->startTime;
+		const long long total_samples = (PrTime)sampleRateP.value.floatValue * pr_duration / ticksPerSecond;
 		
 		csSDK_uint32 audioRenderID = 0;
 		result = audioSuite->MakeAudioRenderer(exID,
@@ -707,15 +1051,21 @@ exSDKExport(
 					
 						result = audioSuite->GetAudio(audioRenderID, samples_to_get, float_buffers, true);
 						
-						double multiplier = (1L << (sampleSizeP.value.intValue - 1));
-						
 						if(result == malNoError)
 						{
+							const double multiplier = (1L << (sampleSizeP.value.intValue - 1));
+							
 							for(int c=0; c < audioChannels; c++)
 							{
+								// for surround channels
+								// Premiere uses Left, Right, Left Rear, Right Rear, Center, LFE
+								// FLAC uses Left, Right, Center, LFE, Left Rear, Right Rear
+								// http://xiph.org/flac/format.html#frame_header
+								static const int swizzle[] = {0, 1, 4, 5, 2, 3};
+								
 								for(int i=0; i < samples_to_get; i++)
 								{
-									int_buffers[c][i] = AudioClip((double)float_buffers[c][i] * multiplier, multiplier);
+									int_buffers[swizzle[c]][i] = AudioClip((double)float_buffers[c][i] * multiplier, multiplier);
 								}
 							}
 							
@@ -763,11 +1113,10 @@ exSDKExport(
 			{
 				result = exportReturn_InternalError;
 			}
+			
+			audioSuite->ReleaseAudioRenderer(exID, audioRenderID);
 		}
-		
-		audioSuite->ReleaseAudioRenderer(exID, audioRenderID);
 	}
-#endif
 
 	return result;
 }
@@ -821,6 +1170,19 @@ exSDKQueryOutputSettings(
 				float ogg_mult = (qualityMult * 0.4) + 0.1;
 			
 				videoBitrate += (sampleRate.value.floatValue * audioChannels * 8 * 4 * ogg_mult) / 1024; // IDK
+			}
+			else
+				videoBitrate += audioBitrateP.value.intValue;
+		}
+		else if(fileType == Opus_ID)
+		{
+			exParamValues autoBitrateP, audioBitrateP;
+			paramSuite->GetParamValue(exID, gIdx, OpusAudioAutoBitrate, &autoBitrateP);
+			paramSuite->GetParamValue(exID, gIdx, OpusAudioBitrate, &audioBitrateP);
+			
+			if(autoBitrateP.value.intValue)
+			{
+				videoBitrate += (audioChannels * 64);
 			}
 			else
 				videoBitrate += audioBitrateP.value.intValue;
@@ -892,6 +1254,13 @@ exSDKGenerateDefaultParams(
 	sampleRateValues.value.floatValue = sampleRateP.mFloat64;
 	sampleRateValues.disabled = kPrFalse;
 	sampleRateValues.hidden = kPrFalse;
+	
+	if(fileType == Opus_ID)
+	{
+		sampleRateValues.value.floatValue = 48000;
+		sampleRateValues.disabled = kPrTrue;
+		//sampleRateValues.hidden = kPrTrue;
+	}
 	
 	exNewParamInfo sampleRateParam;
 	sampleRateParam.structVersion = 1;
@@ -977,6 +1346,49 @@ exSDKGenerateDefaultParams(
 		exNewParamInfo audioBitrateParam;
 		audioBitrateParam.structVersion = 1;
 		strncpy(audioBitrateParam.identifier, OggAudioBitrate, 255);
+		audioBitrateParam.paramType = exParamType_int;
+		audioBitrateParam.flags = exParamFlag_slider;
+		audioBitrateParam.paramValues = audioBitrateValues;
+		
+		exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &audioBitrateParam);
+	}
+	else if(fileType == Opus_ID)
+	{
+		// Audio Codec Settings Group
+		utf16ncpy(groupString, "Codec settings", 255);
+		exportParamSuite->AddParamGroup(exID, gIdx,
+										ADBEAudioTabGroup, ADBEAudioCodecGroup, groupString,
+										kPrFalse, kPrFalse, kPrFalse);
+		
+		// Auto Bitrate
+		exParamValues autoBitrateValues;
+		autoBitrateValues.structVersion = 1;
+		autoBitrateValues.value.intValue = kPrTrue;
+		autoBitrateValues.disabled = kPrFalse;
+		autoBitrateValues.hidden = kPrFalse;
+		
+		exNewParamInfo autoBitrateParam;
+		autoBitrateParam.structVersion = 1;
+		strncpy(autoBitrateParam.identifier, OpusAudioAutoBitrate, 255);
+		autoBitrateParam.paramType = exParamType_bool;
+		autoBitrateParam.flags = exParamFlag_none;
+		autoBitrateParam.paramValues = autoBitrateValues;
+		
+		exportParamSuite->AddParam(exID, gIdx, ADBEAudioCodecGroup, &autoBitrateParam);
+		
+		
+		// Bitrate
+		exParamValues audioBitrateValues;
+		audioBitrateValues.structVersion = 1;
+		audioBitrateValues.rangeMin.intValue = 1;
+		audioBitrateValues.rangeMax.intValue = 512;
+		audioBitrateValues.value.intValue = 128;
+		audioBitrateValues.disabled = kPrTrue;
+		audioBitrateValues.hidden = kPrFalse;
+		
+		exNewParamInfo audioBitrateParam;
+		audioBitrateParam.structVersion = 1;
+		strncpy(audioBitrateParam.identifier, OpusAudioBitrate, 255);
 		audioBitrateParam.paramType = exParamType_int;
 		audioBitrateParam.flags = exParamFlag_slider;
 		audioBitrateParam.paramValues = audioBitrateValues;
@@ -1175,6 +1587,30 @@ exSDKPostProcessParams(
 		
 		exportParamSuite->ChangeParam(exID, gIdx, OggAudioBitrate, &bitrateValues);
 	}
+	else if(fileType == Opus_ID)
+	{
+		// Audio codec settings
+		utf16ncpy(paramString, "Opus settings", 255);
+		exportParamSuite->SetParamName(exID, gIdx, ADBEAudioCodecGroup, paramString);
+		
+		
+		// Auto bitrate
+		utf16ncpy(paramString, "Auto bitrate", 255);
+		exportParamSuite->SetParamName(exID, gIdx, OpusAudioAutoBitrate, paramString);
+		
+		
+		// Bitrate
+		utf16ncpy(paramString, "Bitrate (kb/s)", 255);
+		exportParamSuite->SetParamName(exID, gIdx, OpusAudioBitrate, paramString);
+		
+		exParamValues bitrateValues;
+		exportParamSuite->GetParamValue(exID, gIdx, OpusAudioBitrate, &bitrateValues);
+
+		bitrateValues.rangeMin.intValue = 1;
+		bitrateValues.rangeMax.intValue = 512;
+		
+		exportParamSuite->ChangeParam(exID, gIdx, OpusAudioBitrate, &bitrateValues);
+	}
 	else if(fileType == FLAC_ID)
 	{
 		// Sample Size
@@ -1270,6 +1706,21 @@ exSDKGetParamSummary(
 			stream2 << "Quality " << audioQualityP.value.floatValue;
 		}
 	}
+	else if(fileType == Opus_ID)
+	{
+		exParamValues autoBitrateP, audioBitrateP;
+		paramSuite->GetParamValue(exID, gIdx, OpusAudioAutoBitrate, &autoBitrateP);
+		paramSuite->GetParamValue(exID, gIdx, OpusAudioBitrate, &audioBitrateP);
+	
+		if(autoBitrateP.value.intValue == 1)
+		{
+			stream2 << "Auto bitrate";
+		}
+		else
+		{
+			stream2 << audioBitrateP.value.intValue << " kb/s";
+		}
+	}
 	else if(fileType == FLAC_ID)
 	{
 		exParamValues sampleSizeP, FLACcompressionP;
@@ -1324,6 +1775,19 @@ exSDKValidateParamChanged (
 			
 			paramSuite->ChangeParam(exID, gIdx, OggAudioQuality, &audioQualityP);
 			paramSuite->ChangeParam(exID, gIdx, OggAudioBitrate, &audioBitrateP);
+		}
+	}
+	else if(fileType == Opus_ID)
+	{
+		if(param == OpusAudioAutoBitrate)
+		{
+			exParamValues autoBitrateP, audioBitrateP;
+			paramSuite->GetParamValue(exID, gIdx, OpusAudioAutoBitrate, &autoBitrateP);
+			paramSuite->GetParamValue(exID, gIdx, OpusAudioBitrate, &audioBitrateP);
+			
+			audioBitrateP.disabled = autoBitrateP.value.intValue;
+			
+			paramSuite->ChangeParam(exID, gIdx, OpusAudioBitrate, &audioBitrateP);
 		}
 	}
 	else if(fileType == FLAC_ID)

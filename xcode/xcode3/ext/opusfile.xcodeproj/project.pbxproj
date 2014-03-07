@@ -1,0 +1,257 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 45;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		2AF194A21871F3CF004CDE6F /* opusfile.h in Headers */ = {isa = PBXBuildFile; fileRef = 2AF1947F1871F3CF004CDE6F /* opusfile.h */; };
+		2AF194A31871F3CF004CDE6F /* http.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF194891871F3CF004CDE6F /* http.c */; };
+		2AF194A41871F3CF004CDE6F /* info.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF1948A1871F3CF004CDE6F /* info.c */; };
+		2AF194A51871F3CF004CDE6F /* internal.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF1948B1871F3CF004CDE6F /* internal.c */; };
+		2AF194A61871F3CF004CDE6F /* internal.h in Headers */ = {isa = PBXBuildFile; fileRef = 2AF1948C1871F3CF004CDE6F /* internal.h */; };
+		2AF194A71871F3CF004CDE6F /* opusfile.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF1948D1871F3CF004CDE6F /* opusfile.c */; };
+		2AF194A81871F3CF004CDE6F /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 2AF1948E1871F3CF004CDE6F /* stream.c */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		2AF1947F1871F3CF004CDE6F /* opusfile.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = opusfile.h; sourceTree = "<group>"; };
+		2AF194891871F3CF004CDE6F /* http.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http.c; sourceTree = "<group>"; };
+		2AF1948A1871F3CF004CDE6F /* info.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = info.c; sourceTree = "<group>"; };
+		2AF1948B1871F3CF004CDE6F /* internal.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = internal.c; sourceTree = "<group>"; };
+		2AF1948C1871F3CF004CDE6F /* internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = internal.h; sourceTree = "<group>"; };
+		2AF1948D1871F3CF004CDE6F /* opusfile.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = opusfile.c; sourceTree = "<group>"; };
+		2AF1948E1871F3CF004CDE6F /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
+		2AF1948F1871F3CF004CDE6F /* wincerts.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = wincerts.c; sourceTree = "<group>"; };
+		2AF194901871F3CF004CDE6F /* winerrno.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = winerrno.h; sourceTree = "<group>"; };
+		D2AAC046055464E500DB518D /* libopusfile.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libopusfile.a; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D289987405E68DCB004EDB86 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		08FB7794FE84155DC02AAC07 /* opusfile */ = {
+			isa = PBXGroup;
+			children = (
+				2AF1943B1871F3CF004CDE6F /* opusfile */,
+				C6A0FF2B0290797F04C91782 /* Documentation */,
+				1AB674ADFE9D54B511CA2CBB /* Products */,
+			);
+			name = opusfile;
+			sourceTree = "<group>";
+		};
+		1AB674ADFE9D54B511CA2CBB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D2AAC046055464E500DB518D /* libopusfile.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		2AF1943B1871F3CF004CDE6F /* opusfile */ = {
+			isa = PBXGroup;
+			children = (
+				2AF1947E1871F3CF004CDE6F /* include */,
+				2AF194881871F3CF004CDE6F /* src */,
+			);
+			name = opusfile;
+			path = ../../../ext/opusfile;
+			sourceTree = SOURCE_ROOT;
+		};
+		2AF1947E1871F3CF004CDE6F /* include */ = {
+			isa = PBXGroup;
+			children = (
+				2AF1947F1871F3CF004CDE6F /* opusfile.h */,
+			);
+			path = include;
+			sourceTree = "<group>";
+		};
+		2AF194881871F3CF004CDE6F /* src */ = {
+			isa = PBXGroup;
+			children = (
+				2AF194891871F3CF004CDE6F /* http.c */,
+				2AF1948A1871F3CF004CDE6F /* info.c */,
+				2AF1948B1871F3CF004CDE6F /* internal.c */,
+				2AF1948C1871F3CF004CDE6F /* internal.h */,
+				2AF1948D1871F3CF004CDE6F /* opusfile.c */,
+				2AF1948E1871F3CF004CDE6F /* stream.c */,
+				2AF1948F1871F3CF004CDE6F /* wincerts.c */,
+				2AF194901871F3CF004CDE6F /* winerrno.h */,
+			);
+			path = src;
+			sourceTree = "<group>";
+		};
+		C6A0FF2B0290797F04C91782 /* Documentation */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Documentation;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		D2AAC043055464E500DB518D /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2AF194A21871F3CF004CDE6F /* opusfile.h in Headers */,
+				2AF194A61871F3CF004CDE6F /* internal.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		D2AAC045055464E500DB518D /* opusfile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1DEB91EB08733DB70010E9CD /* Build configuration list for PBXNativeTarget "opusfile" */;
+			buildPhases = (
+				D2AAC043055464E500DB518D /* Headers */,
+				D2AAC044055464E500DB518D /* Sources */,
+				D289987405E68DCB004EDB86 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = opusfile;
+			productName = opusfile;
+			productReference = D2AAC046055464E500DB518D /* libopusfile.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		08FB7793FE84155DC02AAC07 /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = 1DEB91EF08733DB70010E9CD /* Build configuration list for PBXProject "opusfile" */;
+			compatibilityVersion = "Xcode 3.1";
+			developmentRegion = English;
+			hasScannedForEncodings = 1;
+			knownRegions = (
+				English,
+				Japanese,
+				French,
+				German,
+			);
+			mainGroup = 08FB7794FE84155DC02AAC07 /* opusfile */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D2AAC045055464E500DB518D /* opusfile */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D2AAC044055464E500DB518D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2AF194A31871F3CF004CDE6F /* http.c in Sources */,
+				2AF194A41871F3CF004CDE6F /* info.c in Sources */,
+				2AF194A51871F3CF004CDE6F /* internal.c in Sources */,
+				2AF194A71871F3CF004CDE6F /* opusfile.c in Sources */,
+				2AF194A81871F3CF004CDE6F /* stream.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1DEB91EC08733DB70010E9CD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COPY_PHASE_STRIP = NO;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_FIX_AND_CONTINUE = YES;
+				GCC_MODEL_TUNING = G5;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				INSTALL_PATH = /usr/local/lib;
+				PRODUCT_NAME = opusfile;
+			};
+			name = Debug;
+		};
+		1DEB91ED08733DB70010E9CD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_MODEL_TUNING = G5;
+				INSTALL_PATH = /usr/local/lib;
+				PRODUCT_NAME = opusfile;
+			};
+			name = Release;
+		};
+		1DEB91F008733DB70010E9CD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_32_64_BIT)";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					../../../ext/libogg/include,
+					../../../ext/opus/include,
+				);
+				ONLY_ACTIVE_ARCH = YES;
+				PREBINDING = NO;
+				SDKROOT = macosx10.6;
+			};
+			name = Debug;
+		};
+		1DEB91F108733DB70010E9CD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_32_64_BIT)";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_PREPROCESSOR_DEFINITIONS = NDEBUG;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					../../../ext/libogg/include,
+					../../../ext/opus/include,
+				);
+				PREBINDING = NO;
+				SDKROOT = macosx10.6;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1DEB91EB08733DB70010E9CD /* Build configuration list for PBXNativeTarget "opusfile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1DEB91EC08733DB70010E9CD /* Debug */,
+				1DEB91ED08733DB70010E9CD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1DEB91EF08733DB70010E9CD /* Build configuration list for PBXProject "opusfile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1DEB91F008733DB70010E9CD /* Debug */,
+				1DEB91F108733DB70010E9CD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 08FB7793FE84155DC02AAC07 /* Project object */;
+}

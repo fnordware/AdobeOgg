@@ -1,16 +1,28 @@
 AdobeOgg
 ========
 
-This is a project where I'm building plug-ins for the [Ogg Vorbis](http://www.vorbis.com/) audio format to be used inside the various Adobe applications.
+This is a project where I'm building plug-ins for the [Ogg](http://www.xiph.org/ogg/) container format to be used inside the various Adobe applications.
 
-Right now there's a working Ogg Vorbis plug-in for Premiere Pro, considered to be a beta release.
+Right now there are working [Ogg Vorbis](http://www.vorbis.com/) and [Theora](http://www.theora.org/) plug-ins for Premiere Pro, considered to be a beta release.
 
-The same plug-in includes support for [FLAC](http://xiph.org/flac/) as well, but only on Mac currently. If anyone wants to try to solve my Windows linking problems, be my guest.
+The Vorbis plug-in includes support for [Ogg Opus](http://opus-codec.org/) and [FLAC](http://xiph.org/flac/) as well.
+
+
+Download
+--------
+Here are the latest binaries:
+
+**Ogg Vorbis for Premiere Pro** _v0.5b5, 20 January 2014_
+[Mac](http://www.fnordware.com/downloads/Ogg_v0.5b5_mac.zip) | [Win](http://www.fnordware.com/downloads/Ogg_v0.5b5_win.zip)
+
+**Theora for Premiere Pro** _v0.5b4, 8 January 2014_
+[Mac](http://www.fnordware.com/downloads/Theora_v0.5b4_mac.zip) | [Win](http://www.fnordware.com/downloads/Theora_v0.5b4_win.zip)
 
 
 License
 -------
 BSD
+
 
 Author
 ------

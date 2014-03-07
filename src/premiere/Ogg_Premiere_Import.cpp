@@ -30,7 +30,7 @@
 
 // ------------------------------------------------------------------------
 //
-// Ogg Vorbis (and FLAC) plug-in for Premiere
+// Ogg Vorbis (and Opus and FLAC) plug-in for Premiere
 //
 // by Brendan Bolles <brendan@fnordware.com>
 //
@@ -40,16 +40,12 @@
 #include "Ogg_Premiere_Import.h"
 
 
-extern "C" {
-
 #include <vorbis/codec.h>
 #include <vorbis/vorbisfile.h>
 
-}
+#include <opusfile.h>
 
-#ifdef GOT_FLAC
 #include "FLAC++/decoder.h"
-#endif
 
 #include <assert.h>
 #include <math.h>
@@ -146,9 +142,46 @@ static long ogg_tell_func(void *datasource)
 static ov_callbacks g_ov_callbacks = { ogg_read_func, ogg_seek_func, NULL, ogg_tell_func };
 
 
+
+static int opusfile_read_func(void *_stream, unsigned char *_ptr, int _nbytes)
+{
+	return ogg_read_func(_ptr, 1, _nbytes, _stream);
+}
+
+
+static int opusfile_seek_func(void *_stream, opus_int64 _offset, int _whence)
+{
+	return ogg_seek_func(_stream, _offset, _whence);
+}
+
+
+static opus_int64 opusfile_tell_func(void *_stream)
+{
+	imFileRef fp = static_cast<imFileRef>(_stream);
+	
+#ifdef PRWIN_ENV
+	LARGE_INTEGER lpos, zero;
+
+	zero.QuadPart = 0;
+
+	BOOL result = SetFilePointerEx(fp, zero, &lpos, FILE_CURRENT);
+
+	return lpos.QuadPart;
+#else
+	SInt64 lpos;
+
+	OSErr result = FSGetForkPosition(CAST_REFNUM(fp), &lpos);
+	
+	return lpos;
+#endif
+}
+
+static OpusFileCallbacks g_opusfile_callbacks = { opusfile_read_func, opusfile_seek_func, opusfile_tell_func, NULL };
+
+
 #pragma mark-
 
-#ifdef GOT_FLAC
+
 class OurDecoder : public FLAC::Decoder::Stream
 {
   public:
@@ -159,7 +192,7 @@ class OurDecoder : public FLAC::Decoder::Stream
 	unsigned get_sample_rate() const { return _sample_rate; }
 	unsigned get_bits_per_sample() const { return _bits_per_sample; }
 	
-	void set_buffers(float **buffers, size_t buf_len) { _buffers = buffers; _buf_len = buf_len; _pos = 0; }
+	void set_buffers(float **buffers, size_t buf_len, FLAC__uint64 start_sample) { _buffers = buffers; _buf_len = buf_len; _start_sample = start_sample; _pos = 0; }
 	size_t get_pos() const { return _pos; }
 	
   protected:
@@ -182,6 +215,7 @@ class OurDecoder : public FLAC::Decoder::Stream
 	
 	size_t _pos;
 	size_t _buf_len;
+	FLAC__uint64 _start_sample;
 	
 	unsigned _channels;
 	unsigned _sample_rate;
@@ -296,10 +330,28 @@ OurDecoder::write_callback(const ::FLAC__Frame *frame, const FLAC__int32 * const
 {
 	if(_buffers != NULL)
 	{
+		// for surround channels
+		// Premiere uses Left, Right, Left Rear, Right Rear, Center, LFE
+		// FLAC uses Left, Right, Center, LFE, Left Rear, Right Rear
+		// http://xiph.org/flac/format.html#frame_header
+		static const int swizzle[] = {0, 1, 4, 5, 2, 3};
+		
+		
+		assert(frame->header.number_type == FLAC__FRAME_NUMBER_TYPE_SAMPLE_NUMBER);
+		
+		int buffer_offset = 0;
+		
+		if(_start_sample > frame->header.number.sample_number)
+			buffer_offset = _start_sample - frame->header.number.sample_number;
+		
+		assert(buffer_offset == 0); // I think I would sometimes get a non-zero offset, but haven't seen it yet
+		
+		assert(_start_sample + buffer_offset + _pos == frame->header.number.sample_number);
+		
 		int samples = _buf_len - _pos;
 		
-		if(samples > frame->header.blocksize)
-			samples = frame->header.blocksize;
+		if(samples > frame->header.blocksize - buffer_offset)
+			samples = frame->header.blocksize - buffer_offset;
 		
 		double divisor = (1L << (frame->header.bits_per_sample - 1));
 		
@@ -307,16 +359,14 @@ OurDecoder::write_callback(const ::FLAC__Frame *frame, const FLAC__int32 * const
 		{
 			for(int c=0; c < get_channels(); c++)
 			{
-				_buffers[c][_pos] = (double)buffer[c][i] / divisor;
+				_buffers[swizzle[c]][_pos] = (double)buffer[c][i + buffer_offset] / divisor;
 			}
 			
 			_pos++;
 		}
-		
-		return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
 	}
 	
-	return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+	return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
 }
 
 
@@ -330,7 +380,7 @@ OurDecoder::metadata_callback(const ::FLAC__StreamMetadata *metadata)
 		_bits_per_sample = metadata->data.stream_info.bits_per_sample;
 	}
 }
-#endif // GOT_FLAC
+
 
 #pragma mark-
 
@@ -353,14 +403,14 @@ typedef struct
 	float					audioSampleRate;
 	
 	OggVorbis_File			*vf;
-#ifdef GOT_FLAC
+	OggOpusFile				*opus;
 	OurDecoder				*flac;
-#endif
 	
 } ImporterLocalRec8, *ImporterLocalRec8Ptr, **ImporterLocalRec8H;
 
 
 static const csSDK_int32 Ogg_filetype = 'OggV';
+static const csSDK_int32 Opus_filetype = 'Opus';
 static const csSDK_int32 FLAC_filetype = 'FLAC';
 
 
@@ -425,8 +475,31 @@ SDKGetIndFormat(
 				#endif
 			}while(0);
 			break;
-#ifdef GOT_FLAC
 		case 1:	
+			do{	
+				char formatname[255]	= "Ogg Opus";
+				char shortname[32]		= "Ogg Opus";
+				char platformXten[256]	= "opus\0\0";
+
+				SDKIndFormatRec->filetype			= Opus_filetype;
+
+				SDKIndFormatRec->canWriteTimecode	= kPrFalse;
+				SDKIndFormatRec->canWriteMetaData	= kPrFalse;
+
+				SDKIndFormatRec->flags = xfCanImport;
+
+				#ifdef PRWIN_ENV
+				strcpy_s(SDKIndFormatRec->FormatName, sizeof (SDKIndFormatRec->FormatName), formatname);				// The long name of the importer
+				strcpy_s(SDKIndFormatRec->FormatShortName, sizeof (SDKIndFormatRec->FormatShortName), shortname);		// The short (menu name) of the importer
+				strcpy_s(SDKIndFormatRec->PlatformExtension, sizeof (SDKIndFormatRec->PlatformExtension), platformXten);	// The 3 letter extension
+				#else
+				strcpy(SDKIndFormatRec->FormatName, formatname);			// The Long name of the importer
+				strcpy(SDKIndFormatRec->FormatShortName, shortname);		// The short (menu name) of the importer
+				strcpy(SDKIndFormatRec->PlatformExtension, platformXten);	// The 3 letter extension
+				#endif
+			}while(0);
+			break;
+		case 2:	
 			do{	
 				char formatname[255]	= "FLAC";
 				char shortname[32]		= "FLAC";
@@ -450,7 +523,6 @@ SDKGetIndFormat(
 				#endif
 			}while(0);
 			break;
-#endif
 		default:
 			result = imBadFormatIndex;
 	}
@@ -488,9 +560,8 @@ SDKOpenFile8(
 		localRecP = reinterpret_cast<ImporterLocalRec8Ptr>( *localRecH );
 		
 		localRecP->vf = NULL;
-#ifdef GOT_FLAC
+		localRecP->opus = NULL;
 		localRecP->flac = NULL;
-#endif
 		
 		localRecP->importerID = SDKfileOpenRec8->inImporterID;
 		localRecP->fileType = SDKfileOpenRec8->fileinfo.filetype;
@@ -562,6 +633,8 @@ SDKOpenFile8(
 	{
 		localRecP->fileType = SDKfileOpenRec8->fileinfo.filetype;
 		
+		assert(0 == ogg_tell_func(static_cast<void *>(*SDKfileRef)));
+			
 		if(localRecP->fileType == Ogg_filetype)
 		{
 			localRecP->vf = new OggVorbis_File;
@@ -586,7 +659,19 @@ SDKOpenFile8(
 			else
 				result = imBadHeader;
 		}
-#ifdef GOT_FLAC
+		else if(localRecP->fileType == Opus_filetype)
+		{
+			int _error = 0;
+			
+			localRecP->opus = op_open_callbacks(static_cast<void *>(*SDKfileRef), &g_opusfile_callbacks, NULL, 0, &_error);
+			
+			if(localRecP->opus != NULL && _error == 0)
+			{
+				assert(op_link_count(localRecP->opus) == 1); // we're not really handling multi-link scenarios
+			}
+			else
+				result = imBadHeader;
+		}
 		else if(localRecP->fileType == FLAC_filetype)
 		{
 			try
@@ -598,13 +683,16 @@ SDKOpenFile8(
 				FLAC__StreamDecoderInitStatus init_status = localRecP->flac->init();
 				
 				assert(init_status == FLAC__STREAM_DECODER_INIT_STATUS_OK && localRecP->flac->is_valid());
+				
+				bool ok = localRecP->flac->process_until_end_of_metadata();
+				
+				assert(ok);
 			}
 			catch(...)
 			{
 				result = imBadHeader;
 			}
 		}
-#endif
 	}
 	
 	// close file and delete private data if we got a bad file
@@ -656,7 +744,14 @@ SDKQuietFile(
 			
 			localRecP->vf = NULL;
 		}
-#ifdef GOT_FLAC
+
+		if(localRecP->opus)
+		{
+			op_free(localRecP->opus);
+			
+			localRecP->opus = NULL;
+		}
+
 		if(localRecP->flac)
 		{
 			localRecP->flac->finish();
@@ -665,7 +760,7 @@ SDKQuietFile(
 			
 			localRecP->flac = NULL;
 		}
-#endif
+
 		stdParms->piSuites->memFuncs->unlockHandle(reinterpret_cast<char**>(ldataH));
 
 	#ifdef PRWIN_ENV
@@ -761,7 +856,7 @@ SDKGetInfo8(
 	
 	if(localRecP)
 	{
-		if(localRecP->fileType == Ogg_filetype)
+		if(localRecP->fileType == Ogg_filetype && localRecP->vf != NULL)
 		{
 			OggVorbis_File &vf = *localRecP->vf;
 		
@@ -778,18 +873,19 @@ SDKGetInfo8(
             if(SDKFileInfo8->audDuration <= 0)
                 result = imBadFile;
 		}
-#ifdef GOT_FLAC
-		else if(localRecP->fileType == FLAC_filetype)
+		else if(localRecP->fileType == Opus_filetype && localRecP->opus != NULL)
 		{
-			assert(localRecP->flac);
-			
+			SDKFileInfo8->hasAudio				= kPrTrue;
+			SDKFileInfo8->audInfo.numChannels	= op_channel_count(localRecP->opus, -1);
+			SDKFileInfo8->audInfo.sampleRate	= 48000; // Ogg Opus always uses 48 kHz
+			SDKFileInfo8->audInfo.sampleType	= kPrAudioSampleType_Compressed;
+													
+			SDKFileInfo8->audDuration			= op_pcm_total(localRecP->opus, -1);
+		}
+		else if(localRecP->fileType == FLAC_filetype && localRecP->flac != NULL)
+		{
 			try
 			{
-				localRecP->flac->reset();
-			
-				bool ok = localRecP->flac->process_until_end_of_metadata();
-				
-			
 				SDKFileInfo8->hasAudio				= kPrTrue;
 				SDKFileInfo8->audInfo.numChannels	= localRecP->flac->get_channels();
 				SDKFileInfo8->audInfo.sampleRate	= localRecP->flac->get_sample_rate();
@@ -799,7 +895,7 @@ SDKGetInfo8(
 				SDKFileInfo8->audInfo.sampleType	= bitDepth == 8 ? kPrAudioSampleType_8BitInt :
 														bitDepth == 16 ? kPrAudioSampleType_16BitInt :
 														bitDepth == 24 ? kPrAudioSampleType_24BitInt :
-														bitDepth == 32 ? kPrAudioSampleType_32BitFloat :
+														bitDepth == 32 ? kPrAudioSampleType_32BitInt :
 														bitDepth == 64 ? kPrAudioSampleType_64BitFloat :
 														kPrAudioSampleType_Compressed;
 														
@@ -810,10 +906,16 @@ SDKGetInfo8(
 				result = imBadFile;
 			}
 		}
-#endif
-		
+
 		localRecP->audioSampleRate			= SDKFileInfo8->audInfo.sampleRate;
 		localRecP->numChannels				= SDKFileInfo8->audInfo.numChannels;
+		
+		
+		if(SDKFileInfo8->audInfo.numChannels > 2 && SDKFileInfo8->audInfo.numChannels != 6)
+		{
+			// Premiere can't handle anything but Mono, Stereo, and 5.1
+			result = imUnsupportedAudioFormat;
+		}
 	}
 		
 	stdParms->piSuites->memFuncs->unlockHandle(reinterpret_cast<char**>(ldataH));
@@ -842,7 +944,17 @@ SDKImportAudio7(
 	{
 		assert(audioRec7->position >= 0); // Do they really want contiguous samples?
 		
-		if(localRecP->fileType == Ogg_filetype)
+		// for surround channels
+		// Premiere uses Left, Right, Left Rear, Right Rear, Center, LFE
+		// Ogg (and Opus) uses Left, Center, Right, Left Read, Right Rear, LFE
+		// http://www.xiph.org/vorbis/doc/Vorbis_I_spec.html#x1-800004.3.9
+		static const int surround_swizzle[] = {0, 2, 3, 4, 1, 5};
+		static const int stereo_swizzle[] = {0, 1, 2, 3, 4, 5}; // no swizzle, actually
+		
+		const int *swizzle = localRecP->numChannels > 2 ? surround_swizzle : stereo_swizzle;
+		
+						
+		if(localRecP->fileType == Ogg_filetype && localRecP->vf != NULL)
 		{
 			OggVorbis_File &vf = *localRecP->vf;
 			
@@ -882,7 +994,7 @@ SDKImportAudio7(
 						
 						for(int i=0; i < localRecP->numChannels; i++)
 						{
-							memcpy(&audioRec7->buffer[i][pos], pcm_channels[i], samples_read * sizeof(float));
+							memcpy(&audioRec7->buffer[swizzle[i]][pos], pcm_channels[i], samples_read * sizeof(float));
 						}
 						
 						samples_needed -= samples_read;
@@ -893,28 +1005,86 @@ SDKImportAudio7(
 				}
 			}
 		}
-#ifdef GOT_FLAC
-		else if(localRecP->fileType == FLAC_filetype)
+		else if(localRecP->fileType == Opus_filetype && localRecP->opus != NULL)
+		{
+			const int num_channels = op_channel_count(localRecP->opus, -1);
+		
+			assert(localRecP->numChannels == num_channels);
+			
+			
+			int seek_err = OV_OK;
+			
+			if(audioRec7->position >= 0) // otherwise contiguous, but we should be good at the current position
+				seek_err = op_pcm_seek(localRecP->opus, audioRec7->position);
+				
+			
+			if(seek_err == OV_OK)
+			{
+				float *pcm_buf = (float *)malloc(sizeof(float) * audioRec7->size * num_channels);
+				
+				if(pcm_buf != NULL)
+				{
+					long samples_needed = audioRec7->size;
+					long pos = 0;
+					
+					while(samples_needed > 0 && result == malNoError)
+					{
+						float *_pcm = &pcm_buf[pos * num_channels];
+						
+						int samples_read = op_read_float(localRecP->opus, _pcm, samples_needed * num_channels, NULL);
+						
+						if(samples_read == 0)
+						{
+							// guess we're at the end of the stream
+							break;
+						}
+						else if(samples_read < 0)
+						{
+							result = imDecompressionError;
+						}
+						else
+						{
+							for(int c=0; c < localRecP->numChannels; c++)
+							{
+								for(int i=0; i < samples_read; i++)
+								{
+									audioRec7->buffer[swizzle[c]][pos + i] = _pcm[(i * num_channels) + c];
+								}
+							}
+							
+							samples_needed -= samples_read;
+							pos += samples_read;
+						}
+					}
+					
+					free(pcm_buf);
+				}
+			}
+		}
+		else if(localRecP->fileType == FLAC_filetype && localRecP->flac != NULL)
 		{
 			try
 			{
-				localRecP->flac->reset();
+				//localRecP->flac->reset();
 				
+				assert(audioRec7->position >= 0); // not handling Premiere's continuous reads
 				
-				assert(audioRec7->position >= 0);
+				assert(localRecP->flac->get_channels() == localRecP->numChannels);
+				
 				
 				long samples_needed = audioRec7->size;
 				
 				
-				localRecP->flac->set_buffers(audioRec7->buffer, samples_needed);
+				localRecP->flac->set_buffers(audioRec7->buffer, samples_needed, audioRec7->position);
+				
+				
+				// Calling seek will cause flac to "write" some audio, of course!
+				bool sought = localRecP->flac->seek_absolute(audioRec7->position);
 				
 				
 				bool eof = false;
 				
 				size_t buffer_position = 0;
-				
-				// FYI, libflac will "write" some audio when you call the seek function.  Of course!
-				bool sought = localRecP->flac->seek_absolute(audioRec7->position);
 				
 				if(sought)
 				{
@@ -943,14 +1113,13 @@ SDKImportAudio7(
 					}while(samples_needed > 0 && !eof);
 				}
 				
-				localRecP->flac->set_buffers(NULL, 0); // don't trust libflac not to write at inopportune times
+				localRecP->flac->set_buffers(NULL, 0, 0); // don't trust libflac not to write at inopportune times
 			}
 			catch(...)
 			{
 				result = imDecompressionError;
 			}
 		}
-#endif
 	}
 	
 					
