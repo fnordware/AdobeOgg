@@ -1260,10 +1260,10 @@ th_ycbcr_buffer     ycbcr;
         }
       }
       if(!quiet&&timebase>0){
-        int hundredths=(int)(timebase*100-(long)timebase*100);
-        int seconds=(long)timebase%60;
-        int minutes=((long)timebase/60)%60;
-        int hours=(long)timebase/3600;
+        //int hundredths=(int)(timebase*100-(long)timebase*100);
+        //int seconds=(long)timebase%60;
+        //int minutes=((long)timebase/60)%60;
+        //int hours=(long)timebase/3600;
         if(audio_or_video)vkbps=(int)rint(video_bytesout*8./timebase*.001);
         else akbps=(int)rint(audio_bytesout*8./timebase*.001);
         //fprintf(stderr,
@@ -1478,13 +1478,19 @@ exSDKExport(
 	int video_q=-1;
 	
 	if(audioMethodP.value.intValue == OGG_QUALITY)
-		audio_q = audioQualityP.value.floatValue;
+	{
+		audio_q = audioQualityP.value.floatValue * 0.099f;
+	}
 	else
-		audio_r = audioBitrateP.value.intValue;
+	{
+		audio_r = audioBitrateP.value.intValue * 1024;
+	}
 		
 	
 	if(methodP.value.intValue == THEORA_METHOD_QUALITY)
-		video_q = videoQualityP.value.intValue;
+	{
+		video_q = (6.3f * (float)videoQualityP.value.intValue) + 0.5f;
+	}
 	else
 	{
 		video_r = bitrateP.value.intValue * 1024;
