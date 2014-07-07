@@ -308,13 +308,13 @@ static void get_framerate(PrTime ticksPerSecond, PrTime ticks_per_frame, exRatio
 {
 	PrTime frameRates[] = {	10, 15, 23,
 							24, 25, 29,
-							30, 50, 59,
-							60};
+							30, 48, 48,
+							50, 59, 60};
 													
-	PrTime frameRateNumDens[][2] = {{10, 1}, {15, 1}, {24000, 1001},
-									{24, 1}, {25, 1}, {30000, 1001},
-									{30, 1}, {50, 1}, {60000, 1001},
-									{60, 1}};
+	static const PrTime frameRateNumDens[][2] = {	{10, 1}, {15, 1}, {24000, 1001},
+													{24, 1}, {25, 1}, {30000, 1001},
+													{30, 1}, {48000, 1001}, {48, 1},
+													{50, 1}, {60000, 1001}, {60, 1}};
 	
 	int frameRateIndex = -1;
 	

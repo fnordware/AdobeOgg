@@ -452,11 +452,10 @@ static void
 float_to_rational_fps(float fps, unsigned int *fps_num, unsigned int *fps_den)
 {
 	// known frame rates
-	static const int frameRateNumDens[10][2] = {{10, 1}, {15, 1}, {24000, 1001},
-												{24, 1}, {25, 1}, {30000, 1001},
-												{30, 1}, {50, 1}, {60000, 1001},
-												{60, 1}};
-
+	static const PrTime frameRateNumDens[][2] = {	{10, 1}, {15, 1}, {24000, 1001},
+													{24, 1}, {25, 1}, {30000, 1001},
+													{30, 1}, {48000, 1001}, {48, 1},
+													{50, 1}, {60000, 1001}, {60, 1}};
 	int match_index = -1;
 	double match_episilon = 999;
 
