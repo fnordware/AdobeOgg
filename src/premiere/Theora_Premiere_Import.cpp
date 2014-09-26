@@ -174,7 +174,7 @@ SDKGetIndFormat(
 			SDKIndFormatRec->canWriteTimecode	= kPrFalse;
 			SDKIndFormatRec->canWriteMetaData	= kPrFalse;
 
-			SDKIndFormatRec->flags = xfCanImport;
+			SDKIndFormatRec->flags = xfCanImport | xfIsMovie;
 
 			#ifdef PRWIN_ENV
 			strcpy_s(SDKIndFormatRec->FormatName, sizeof (SDKIndFormatRec->FormatName), formatname);				// The long name of the importer
