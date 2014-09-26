@@ -40,11 +40,7 @@
 #include "Theora_Premiere_Import.h"
 
 
-extern "C" {
-
 #include "theoraplay.h"
-
-}
 
 
 #include <assert.h>

@@ -56,13 +56,9 @@
 #endif
 
 
-extern "C" {
-
 #include "theora/theoraenc.h"
 #include "vorbis/codec.h"
 #include "vorbis/vorbisenc.h"
-
-}
 
 
 
