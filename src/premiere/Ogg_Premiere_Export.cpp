@@ -628,7 +628,7 @@ exSDKExport(
 								{
 									for(int i=0; i < samples; i++)
 									{
-										buffer[swizzle[c]][i] = prbuffer[c][i];
+										buffer[c][i] = prbuffer[swizzle[c]][i];
 									}
 								}
 							}
@@ -910,7 +910,7 @@ exSDKExport(
 							{
 								for(int i=0; i < samples; i++)
 								{
-									stereo_buffer[(i * audioChannels) + swizzle[c]] = pr_buffer[c][i];
+									stereo_buffer[(i * audioChannels) + c] = pr_buffer[swizzle[c]][i];
 								}
 							}
 						}
@@ -1065,7 +1065,7 @@ exSDKExport(
 								
 								for(int i=0; i < samples_to_get; i++)
 								{
-									int_buffers[swizzle[c]][i] = AudioClip((double)float_buffers[c][i] * multiplier, multiplier);
+									int_buffers[c][i] = AudioClip((double)float_buffers[swizzle[c]][i] * multiplier, multiplier);
 								}
 							}
 							

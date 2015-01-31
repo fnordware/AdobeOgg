@@ -359,7 +359,7 @@ OurDecoder::write_callback(const ::FLAC__Frame *frame, const FLAC__int32 * const
 		{
 			for(int c=0; c < get_channels(); c++)
 			{
-				_buffers[swizzle[c]][_pos] = (double)buffer[c][i + buffer_offset] / divisor;
+				_buffers[c][_pos] = (double)buffer[swizzle[c]][i + buffer_offset] / divisor;
 			}
 			
 			_pos++;
@@ -991,7 +991,7 @@ SDKImportAudio7(
 						
 						for(int i=0; i < localRecP->numChannels; i++)
 						{
-							memcpy(&audioRec7->buffer[swizzle[i]][pos], pcm_channels[i], samples_read * sizeof(float));
+							memcpy(&audioRec7->buffer[i][pos], pcm_channels[swizzle[i]], samples_read * sizeof(float));
 						}
 						
 						samples_needed -= samples_read;
@@ -1045,7 +1045,7 @@ SDKImportAudio7(
 							{
 								for(int i=0; i < samples_read; i++)
 								{
-									audioRec7->buffer[swizzle[c]][pos + i] = _pcm[(i * num_channels) + c];
+									audioRec7->buffer[c][pos + i] = _pcm[(i * num_channels) + swizzle[c]];
 								}
 							}
 							
