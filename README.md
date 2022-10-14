@@ -13,10 +13,10 @@ Download
 Here are the latest binaries:
 
 **Ogg Vorbis for Premiere Pro** _v0.5b6, 30 January 2015_
-[Mac](http://www.fnordware.com/downloads/Ogg_v0.5b6_mac.zip) | [Win](http://www.fnordware.com/downloads/Ogg_v0.5b6_win.zip)
+[Mac](http://www.fnordware.com/downloads/Ogg_v0.5b6_mac.zip) | [Win](https://www.fnordware.com/downloads/Ogg_v0.5b6_win.zip)
 
 **Theora for Premiere Pro** _v0.5b5, 7 March 2014_
-[Mac](http://www.fnordware.com/downloads/Theora_v0.5b5_mac.zip) | [Win](http://www.fnordware.com/downloads/Theora_v0.5b5_win.zip)
+[Mac](http://www.fnordware.com/downloads/Theora_v0.5b5_mac.zip) | [Win](https://www.fnordware.com/downloads/Theora_v0.5b5_win.zip)
 
 
 License
